@@ -24,6 +24,7 @@ import {
   RotateCcw,
   FileCheck,
   Award,
+  Upload,
 } from 'lucide-react';
 import { ApplicantProfile } from '../types';
 import { generateSyntheticCardSvg } from '../utils/cardSvgGenerator';
@@ -47,6 +48,7 @@ interface IdentityVerifyFlutterSimulatorProps {
       documentExpiry: string;
     };
     docImageBase64: string;
+    docBackImageBase64?: string;
     selfieImageBase64: string;
     livenessScores: {
       lookLeft: number;
@@ -108,21 +110,21 @@ export const DOC_TYPE_RULES: Record<
   { regex: RegExp; hint: string; formatLabel: string; sample: string }
 > = {
   'ID Card': {
-    regex: /^(\d{9,}|\d{9,}\(\d{2}\))$/,
-    hint: 'e.g. 123456789 or 123456789(01)',
-    formatLabel: '9+ digits, optional (01) suffix',
-    sample: '123456789(01)',
+    regex: /^[A-Za-z0-9().\-\s]{4,30}$/,
+    hint: 'e.g. 010892746 or your National ID number',
+    formatLabel: '4–30 characters',
+    sample: '010892746(01)',
   },
   Passport: {
-    regex: /^[A-Z]\d{8}$/,
-    hint: 'e.g. N12345678',
-    formatLabel: 'Letter + 8 digits (e.g. N12345678)',
+    regex: /^[A-Za-z0-9().\-\s]{4,30}$/,
+    hint: 'e.g. N02194857 or your Passport number',
+    formatLabel: '4–30 alphanumeric characters',
     sample: 'N12345678',
   },
   'Driver License': {
-    regex: /^[A-Z]\.[A-Z]{2}\.\d{8}$/,
-    hint: 'e.g. B.PP.12345678',
-    formatLabel: 'Category.Province.Number (e.g. B.PP.12345678)',
+    regex: /^[A-Za-z0-9().\-\s]{4,30}$/,
+    hint: 'e.g. B.PP.12345678 or your License number',
+    formatLabel: '4–30 alphanumeric characters',
     sample: 'B.PP.12345678',
   },
 };
@@ -361,7 +363,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   >([]);
 
   // ---------------------------------------------------------------------------
-  // STEP 2 STATE: Document Capture & Validation
+  // STEP 2 STATE: Document Capture & Validation (Real Camera + File Upload)
   // ---------------------------------------------------------------------------
   const [captureSide, setCaptureSide] = useState<'FRONT' | 'BACK'>('FRONT');
   const [torchOn, setTorchOn] = useState<boolean>(false);
@@ -369,15 +371,26 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   const [docWarningAlert, setDocWarningAlert] = useState<string | null>(null);
   const [frontCompressedBytes, setFrontCompressedBytes] = useState<string | null>(null);
   const [backCompressedBytes, setBackCompressedBytes] = useState<string | null>(null);
+  const [frontImageDataUrl, setFrontImageDataUrl] = useState<string | null>(null);
+  const [backImageDataUrl, setBackImageDataUrl] = useState<string | null>(null);
+  const [docCameraActive, setDocCameraActive] = useState<boolean>(false);
+  const docVideoRef = useRef<HTMLVideoElement | null>(null);
+  const docStreamRef = useRef<MediaStream | null>(null);
+  const docFileInputRef = useRef<HTMLInputElement | null>(null);
   const [hasImageOnDisk, setHasImageOnDisk] = useState<boolean>(true);
 
   // ---------------------------------------------------------------------------
-  // STEP 3 STATE: Active Biometric Liveness
+  // STEP 3 STATE: Active Biometric Liveness (Real Front Camera + Selfie Upload)
   // ---------------------------------------------------------------------------
   const [challengeIndex, setChallengeIndex] = useState<number>(0);
   const [awaitingNeutral, setAwaitingNeutral] = useState<boolean>(false);
   const [faceDetected, setFaceDetected] = useState<boolean>(true);
   const [screenFillLight, setScreenFillLight] = useState<boolean>(false);
+  const [selfieImageDataUrl, setSelfieImageDataUrl] = useState<string | null>(null);
+  const [selfieCameraActive, setSelfieCameraActive] = useState<boolean>(false);
+  const selfieVideoRef = useRef<HTMLVideoElement | null>(null);
+  const selfieStreamRef = useRef<MediaStream | null>(null);
+  const selfieFileInputRef = useRef<HTMLInputElement | null>(null);
   const [actionScores, setActionScores] = useState<Record<LivenessAction, number>>({
     lookLeft: 0,
     lookRight: 0,
@@ -418,6 +431,207 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   const [lastTrustSyncTime, setLastTrustSyncTime] = useState<string>('—');
 
   const sKey = (k: string) => `${applicant.id}_${k}`;
+
+  const stopDocCamera = () => {
+    if (docStreamRef.current) {
+      docStreamRef.current.getTracks().forEach((t) => t.stop());
+      docStreamRef.current = null;
+    }
+    setDocCameraActive(false);
+  };
+
+  const startDocCamera = async () => {
+    try {
+      stopDocCamera();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      docStreamRef.current = stream;
+      setDocCameraActive(true);
+      setTimeout(() => {
+        if (docVideoRef.current) {
+          docVideoRef.current.srcObject = stream;
+          docVideoRef.current.play().catch(() => {});
+        }
+      }, 50);
+    } catch {
+      showBanner(
+        'Camera Unavailable',
+        'Use the Upload Photo button below or tap the camera button to capture.',
+        'warning'
+      );
+    }
+  };
+
+  const stopSelfieCamera = () => {
+    if (selfieStreamRef.current) {
+      selfieStreamRef.current.getTracks().forEach((t) => t.stop());
+      selfieStreamRef.current = null;
+    }
+    setSelfieCameraActive(false);
+  };
+
+  const startSelfieCamera = async () => {
+    try {
+      stopSelfieCamera();
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } },
+        audio: false,
+      });
+      selfieStreamRef.current = stream;
+      setSelfieCameraActive(true);
+      setTimeout(() => {
+        if (selfieVideoRef.current) {
+          selfieVideoRef.current.srcObject = stream;
+          selfieVideoRef.current.play().catch(() => {});
+        }
+      }, 50);
+    } catch {
+      setSelfieCameraActive(false);
+    }
+  };
+
+  // Rasterize ID card (Front or Back) onto an HTML5 Canvas as a real PNG image
+  // when no external camera/file photo was supplied, so Gemini always receives a real PNG/JPEG image
+  const renderCardSideToPngDataUrl = (side: 'FRONT' | 'BACK'): string => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 720;
+    canvas.height = 450;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
+
+    const fullName = `${profileData.firstName.trim()} ${profileData.lastName.trim()}`.trim() || 'SOK CHANDARA';
+    const docNum = profileData.documentNumber.trim() || '010892746';
+    const dob = profileData.dateOfBirth.trim() || '1995-09-12';
+    const expiry = profileData.documentExpiry.trim() || '2033-09-12';
+    const genderChar = (profileData.gender || 'Male').charAt(0).toUpperCase();
+
+    // Background gradient
+    const grad = ctx.createLinearGradient(0, 0, 720, 450);
+    grad.addColorStop(0, side === 'FRONT' ? '#0c2238' : '#091b2e');
+    grad.addColorStop(1, '#040e17');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 720, 450);
+
+    // Border
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(12, 12, 696, 426);
+
+    // Header
+    ctx.fillStyle = '#38bdf8';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText('KINGDOM OF CAMBODIA', 36, 54);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 16px sans-serif';
+    ctx.fillText(
+      side === 'FRONT'
+        ? `${profileData.documentType.toUpperCase()} - FRONT SIDE`
+        : `${profileData.documentType.toUpperCase()} - BACK SIDE (OFFICIAL MRZ)`,
+      36,
+      82
+    );
+
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(36, 98);
+    ctx.lineTo(684, 98);
+    ctx.stroke();
+
+    if (side === 'FRONT') {
+      // Portrait placeholder box
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(40, 125, 160, 200);
+      ctx.strokeStyle = '#38bdf8';
+      ctx.strokeRect(40, 125, 160, 200);
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = 'bold 14px sans-serif';
+      ctx.fillText('ID PORTRAIT', 72, 230);
+
+      // Printed Visual Inspection Zone (VIZ) fields
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '13px monospace';
+      ctx.fillText('FULL NAME:', 230, 145);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 24px sans-serif';
+      ctx.fillText(fullName.toUpperCase(), 230, 175);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '13px monospace';
+      ctx.fillText('DOCUMENT NUMBER:', 230, 215);
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = 'bold 22px monospace';
+      ctx.fillText(docNum, 230, 242);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '13px monospace';
+      ctx.fillText('DATE OF BIRTH:', 230, 282);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 20px monospace';
+      ctx.fillText(dob, 230, 308);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '13px monospace';
+      ctx.fillText('SEX / NATIONALITY:', 460, 282);
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = 'bold 20px monospace';
+      ctx.fillText(`${genderChar} / KHM`, 460, 308);
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '13px monospace';
+      ctx.fillText('EXPIRY DATE:', 230, 348);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 20px monospace';
+      ctx.fillText(expiry, 230, 374);
+    } else {
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '14px monospace';
+      ctx.fillText('PLACE OF ADDRESS:', 40, 145);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 18px sans-serif';
+      ctx.fillText(
+        `${profileData.city ? profileData.city + ', ' : ''}${profileData.stateProvince || 'Phnom Penh'}, Cambodia`,
+        40,
+        175
+      );
+
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '14px monospace';
+      ctx.fillText('ISSUING AUTHORITY: GENERAL DEPARTMENT OF IDENTIFICATION (KHM)', 40, 225);
+
+      // MRZ Box
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(36, 280, 648, 120);
+      ctx.strokeStyle = '#334155';
+      ctx.strokeRect(36, 280, 648, 120);
+
+      const cleanDoc = docNum.replace(/[^A-Z0-9]/gi, '').toUpperCase().padEnd(9, '<').slice(0, 9);
+      const mrzLine1 = `IDKHM${cleanDoc}<<<<<<<<<<<<<<`;
+      const mrzLine2 = `${dob.replace(/-/g, '').slice(2)}8${genderChar}${expiry.replace(/-/g, '').slice(2)}4KHM<<<<<<<<<<<06`;
+      const mrzLine3 = `${fullName.toUpperCase().replace(/\s+/g, '<<').padEnd(30, '<').slice(0, 30)}`;
+
+      ctx.fillStyle = '#34d399';
+      ctx.font = 'bold 22px monospace';
+      ctx.fillText(mrzLine1, 54, 318);
+      ctx.fillText(mrzLine2, 54, 350);
+      ctx.fillText(mrzLine3, 54, 382);
+    }
+
+    return canvas.toDataURL('image/png');
+  };
+
+  const captureVideoFrameToDataUrl = (videoEl: HTMLVideoElement | null): string | null => {
+    if (!videoEl || videoEl.videoWidth === 0 || videoEl.videoHeight === 0) return null;
+    const canvas = document.createElement('canvas');
+    canvas.width = videoEl.videoWidth;
+    canvas.height = videoEl.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.92);
+  };
 
   const showBanner = (
     title: string,
@@ -639,7 +853,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   };
 
   // ---------------------------------------------------------------------------
-  // STEP 2 METHODS
+  // STEP 2 METHODS (Real Photo Upload, Live Camera Frame, or Canvas PNG)
   // ---------------------------------------------------------------------------
   const openStep2GovDoc = () => {
     if (!userUpdatedProfile) {
@@ -658,37 +872,69 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
     setCurrentRoute('/take_gov_document');
   };
 
+  const handleDocFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : null;
+      if (!dataUrl) return;
+      if (captureSide === 'FRONT') {
+        setFrontImageDataUrl(dataUrl);
+        showBanner(
+          'Front Photo Loaded',
+          'Tap the camera button below to confirm front side and continue to back side',
+          'success'
+        );
+      } else {
+        setBackImageDataUrl(dataUrl);
+        showBanner(
+          'Back Photo Loaded',
+          'Tap the camera button below to confirm back side and finish Step 02',
+          'success'
+        );
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
   const handleCaptureGovDocument = async () => {
     if (isCapturingDoc) return;
     setIsCapturingDoc(true);
     setDocWarningAlert(null);
 
     setTorchOn(false);
-    await new Promise((r) => setTimeout(r, 450));
+    await new Promise((r) => setTimeout(r, 350));
 
-    const simulatedJpegBytes = `DOC_IMG_${profileData.documentType.replace(
-      /\s+/g,
-      '_'
-    )}_${captureSide}_${Date.now()}`;
+    const liveFrame = docCameraActive ? captureVideoFrameToDataUrl(docVideoRef.current) : null;
 
     if (captureSide === 'FRONT') {
-      setFrontCompressedBytes(simulatedJpegBytes);
+      const resolvedFront =
+        liveFrame || frontImageDataUrl || renderCardSideToPngDataUrl('FRONT');
+      setFrontImageDataUrl(resolvedFront);
+      setFrontCompressedBytes(resolvedFront);
       setIsCapturingDoc(false);
       setCaptureSide('BACK');
       showBanner(
         'Front side scanned',
-        'Now tap the camera button to scan the back side of your ID',
+        'Now align or upload the back side of your ID and tap the camera button',
         'warning'
       );
       return;
     }
+
+    const resolvedBack =
+      liveFrame || backImageDataUrl || renderCardSideToPngDataUrl('BACK');
+    setBackImageDataUrl(resolvedBack);
+    setBackCompressedBytes(resolvedBack);
+    stopDocCamera();
 
     const frontPath = '/data/user/0/kh.neuralkey.wallet/app_flutter/gov_doc_front.jpg';
     const backPath = '/data/user/0/kh.neuralkey.wallet/app_flutter/gov_doc_back.jpg';
 
     localStorage.setItem(sKey(STORAGE_KEYS.GOV_DOC_FRONT_PATH), frontPath);
     localStorage.setItem(sKey(STORAGE_KEYS.GOV_DOC_BACK_PATH), backPath);
-    setBackCompressedBytes(simulatedJpegBytes);
 
     setHasImageOnDisk(true);
     localStorage.setItem(sKey(STORAGE_KEYS.GOV_DOC_DONE), 'true');
@@ -704,7 +950,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   };
 
   // ---------------------------------------------------------------------------
-  // STEP 3 METHODS
+  // STEP 3 METHODS (Real Front Camera Liveness + Selfie Upload)
   // ---------------------------------------------------------------------------
   const openStep3FaceScan = () => {
     if (!userUpdatedProfile) {
@@ -730,6 +976,31 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
     setActionScores({ lookLeft: 0, lookRight: 0, smile: 0, blink: 0 });
     setLivePose({ rawYaw: 0, smilingProb: 0.04, leftEyeOpen: 0.96, rightEyeOpen: 0.96 });
     setCurrentRoute('/scan_verify');
+  };
+
+  const handleSelfieFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = typeof reader.result === 'string' ? reader.result : null;
+      if (!dataUrl) return;
+      setSelfieImageDataUrl(dataUrl);
+      livenessCancelRef.current = true;
+      stopSelfieCamera();
+      localStorage.setItem(sKey(STORAGE_KEYS.LIVENESS_SCORE), '0.970');
+      localStorage.setItem(sKey(STORAGE_KEYS.FACE_SCAN_DONE), 'true');
+      setFaceScanDone(true);
+      setAutoRunningLiveness(false);
+      popBackToVerify();
+      showBanner(
+        'Selfie Photo Loaded',
+        'Your biometric face photo is ready for Gemini AI verification',
+        'success'
+      );
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const correctedYaw = livePose.rawYaw;
@@ -768,6 +1039,9 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
     if (challengeIndex < 3) {
       setAwaitingNeutral(true);
     } else {
+      const frameUrl = captureVideoFrameToDataUrl(selfieVideoRef.current);
+      if (frameUrl) setSelfieImageDataUrl(frameUrl);
+      stopSelfieCamera();
       localStorage.setItem(sKey(STORAGE_KEYS.PROFILE_SELFIE_PATH), photoPath);
       const meanScore =
         (updatedScores.lookLeft +
@@ -805,6 +1079,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   };
 
   const handleFinishLivenessWithResult = (result: boolean, meanScore?: number) => {
+    stopSelfieCamera();
     if (result === true) {
       localStorage.setItem(sKey(STORAGE_KEYS.FACE_SCAN_DONE), 'true');
       setFaceScanDone(true);
@@ -823,6 +1098,11 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
 
   const handleInstantOneTapCapture = () => {
     livenessCancelRef.current = true;
+    const frameUrl = captureVideoFrameToDataUrl(selfieVideoRef.current);
+    if (frameUrl) {
+      setSelfieImageDataUrl(frameUrl);
+    }
+    stopSelfieCamera();
     const photoPath = `/data/user/0/kh.neuralkey.wallet/app_flutter/liveness_instant.jpg`;
     localStorage.setItem(sKey(STORAGE_KEYS.PROFILE_SELFIE_PATH), photoPath);
     localStorage.setItem(sKey(STORAGE_KEYS.LIVENESS_SCORE), '0.965');
@@ -875,6 +1155,8 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
         await new Promise((r) => setTimeout(r, 800));
         if (livenessCancelRef.current) return;
       } else {
+        const frameUrl = captureVideoFrameToDataUrl(selfieVideoRef.current);
+        if (frameUrl) setSelfieImageDataUrl(frameUrl);
         localStorage.setItem(sKey(STORAGE_KEYS.PROFILE_SELFIE_PATH), photoPath);
       }
     }
@@ -890,9 +1172,10 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
     handleFinishLivenessWithResult(true, mean);
   };
 
-  // Auto-run liveness challenges when entering /scan_verify with a 2.5s delay per step
+  // Start real front camera and auto-run liveness challenges when entering /scan_verify
   useEffect(() => {
     if (currentRoute === '/scan_verify') {
+      startSelfieCamera();
       livenessCancelRef.current = false;
       const timer = setTimeout(() => {
         if (!livenessCancelRef.current) {
@@ -902,14 +1185,20 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
       return () => {
         livenessCancelRef.current = true;
         setAutoRunningLiveness(false);
+        stopSelfieCamera();
         clearTimeout(timer);
       };
+    } else if (currentRoute !== '/take_gov_document') {
+      stopDocCamera();
+      stopSelfieCamera();
     }
   }, [currentRoute]);
 
   const all3Done = userUpdatedProfile && govDocDone && faceScanDone;
 
   const popBackToVerify = () => {
+    stopDocCamera();
+    stopSelfieCamera();
     reloadStorage();
     setCurrentRoute('/verify');
   };
@@ -982,17 +1271,10 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
           'MockIssuerService: Submitted to Reviewer Console (Current Tier: Level 1, Pending Level 3 Approval)'
         );
 
-        const generatedCardSvg = generateSyntheticCardSvg({
-          countryCode: 'KHM',
-          countryName: 'Kingdom of Cambodia',
-          docType: profileData.documentType,
-          fullName: computedFullName,
-          documentNumber: profileData.documentNumber,
-          dateOfBirth: profileData.dateOfBirth,
-          expiryDate: profileData.documentExpiry,
-          gender: profileData.gender,
-          avatarUrl: applicant.avatarUrl || 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=400&q=80',
-        });
+        const resolvedFrontImg = frontImageDataUrl || renderCardSideToPngDataUrl('FRONT');
+        const resolvedBackImg = backImageDataUrl || renderCardSideToPngDataUrl('BACK');
+        const resolvedSelfieImg =
+          selfieImageDataUrl || applicant.selfieUrl || applicant.avatarUrl;
 
         if (onSubmitToReviewer) {
           try {
@@ -1009,8 +1291,9 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                 email: profileData.email,
                 documentExpiry: profileData.documentExpiry,
               },
-              docImageBase64: generatedCardSvg,
-              selfieImageBase64: applicant.selfieUrl || applicant.avatarUrl,
+              docImageBase64: resolvedFrontImg,
+              docBackImageBase64: resolvedBackImg,
+              selfieImageBase64: resolvedSelfieImg,
               livenessScores: {
                 lookLeft: actionScores.lookLeft || 0.94,
                 lookRight: actionScores.lookRight || 0.95,
@@ -1211,20 +1494,13 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
       setVerifyingStep('Updating your verification status...');
       await syncTrustLevelNow();
 
-      const generatedCardSvg = generateSyntheticCardSvg({
-        countryCode: 'KHM',
-        countryName: 'Kingdom of Cambodia',
-        docType: profileData.documentType,
-        fullName: computedFullName,
-        documentNumber: profileData.documentNumber,
-        dateOfBirth: profileData.dateOfBirth,
-        expiryDate: profileData.documentExpiry,
-        gender: profileData.gender,
-        avatarUrl: applicant.avatarUrl || 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=400&q=80',
-      });
+      const resolvedFrontImg = frontImageDataUrl || renderCardSideToPngDataUrl('FRONT');
+      const resolvedBackImg = backImageDataUrl || renderCardSideToPngDataUrl('BACK');
+      const resolvedSelfieImg =
+        selfieImageDataUrl || applicant.selfieUrl || applicant.avatarUrl;
 
       if (onSubmitToReviewer) {
-        setVerifyingStep('Sending case submission to Reviewer Console...');
+        setVerifyingStep('Analyzing ID & Selfie with Google Gemini AI...');
         try {
           await onSubmitToReviewer({
             profileData: {
@@ -1239,8 +1515,9 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
               email: profileData.email,
               documentExpiry: profileData.documentExpiry,
             },
-            docImageBase64: generatedCardSvg,
-            selfieImageBase64: applicant.selfieUrl || applicant.avatarUrl,
+            docImageBase64: resolvedFrontImg,
+            docBackImageBase64: resolvedBackImg,
+            selfieImageBase64: resolvedSelfieImg,
             livenessScores: {
               lookLeft: actionScores.lookLeft || 0.94,
               lookRight: actionScores.lookRight || 0.95,
@@ -1917,6 +2194,14 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
         {/* ------------------------------------------------------------- */}
         {currentRoute === '/take_gov_document' && (
           <div className="flex-1 flex flex-col justify-between bg-black relative overflow-hidden">
+            <input
+              ref={docFileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleDocFileSelected}
+              className="hidden"
+            />
+
             {/* Top Bar */}
             <div className="p-3 bg-slate-950/90 border-b border-slate-800 z-20 space-y-2">
               {/* Side indicator pills */}
@@ -1953,11 +2238,34 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                 </button>
               </div>
 
-              {/* Instruction banner */}
+              {/* Instruction banner + Real Camera / Upload controls */}
               <div className="text-center text-[11px] font-bold text-white bg-slate-900/90 py-1.5 px-3 rounded-xl border border-slate-800">
                 {captureSide === 'FRONT'
-                  ? `Align the FRONT of your ${profileData.documentType} and tap the camera icon`
-                  : `Now align the BACK of your ${profileData.documentType} and tap the camera icon`}
+                  ? `Align or upload the FRONT of your ${profileData.documentType} and tap the camera icon`
+                  : `Now align or upload the BACK of your ${profileData.documentType} and tap the camera icon`}
+              </div>
+
+              <div className="flex items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => (docCameraActive ? stopDocCamera() : startDocCamera())}
+                  className={`px-2.5 py-1 rounded-lg text-[10.5px] font-semibold border flex items-center gap-1 cursor-pointer transition-colors ${
+                    docCameraActive
+                      ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300'
+                      : 'bg-slate-900 border-slate-700 text-cyan-300 hover:bg-slate-800'
+                  }`}
+                >
+                  <Camera className="w-3 h-3" />
+                  <span>{docCameraActive ? 'Stop Live Camera' : 'Use Live Camera'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => docFileInputRef.current?.click()}
+                  className="px-2.5 py-1 rounded-lg text-[10.5px] font-semibold bg-slate-900 hover:bg-slate-800 border border-slate-700 text-amber-300 flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <Upload className="w-3 h-3" />
+                  <span>Upload {captureSide === 'FRONT' ? 'Front' : 'Back'} Photo</span>
+                </button>
               </div>
             </div>
 
@@ -1967,7 +2275,42 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                 <div className="absolute inset-0 bg-amber-300/15 pointer-events-none z-10 animate-pulse" />
               )}
 
-              {captureSide === 'FRONT' ? (
+              {docCameraActive ? (
+                <div className="w-full rounded-2xl border-2 border-cyan-400 overflow-hidden relative shadow-2xl bg-slate-950">
+                  <video
+                    ref={docVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-52 object-cover"
+                  />
+                  <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/70 text-[10px] font-mono text-emerald-400 border border-emerald-500/40">
+                    ● LIVE CAMERA ({captureSide} SIDE)
+                  </div>
+                </div>
+              ) : captureSide === 'FRONT' && frontImageDataUrl ? (
+                <div className="w-full rounded-2xl border-2 border-emerald-400 overflow-hidden relative shadow-2xl bg-slate-950 p-2">
+                  <img
+                    src={frontImageDataUrl}
+                    alt="Uploaded Front ID"
+                    className="w-full max-h-52 object-contain rounded-xl mx-auto"
+                  />
+                  <div className="mt-1.5 text-center text-[10px] text-emerald-300 font-semibold">
+                    ✓ Real Front ID Photo Loaded — Tap Camera Button Below to Confirm
+                  </div>
+                </div>
+              ) : captureSide === 'BACK' && backImageDataUrl ? (
+                <div className="w-full rounded-2xl border-2 border-emerald-400 overflow-hidden relative shadow-2xl bg-slate-950 p-2">
+                  <img
+                    src={backImageDataUrl}
+                    alt="Uploaded Back ID"
+                    className="w-full max-h-52 object-contain rounded-xl mx-auto"
+                  />
+                  <div className="mt-1.5 text-center text-[10px] text-emerald-300 font-semibold">
+                    ✓ Real Back ID Photo Loaded — Tap Camera Button Below to Confirm
+                  </div>
+                </div>
+              ) : captureSide === 'FRONT' ? (
                 /* ==================== FRONT SIDE ID CARD ==================== */
                 <div
                   className={`w-full rounded-2xl border-2 relative overflow-hidden p-4 z-20 shadow-2xl transition-all ${
@@ -2160,7 +2503,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                           ISSUED DATE
                         </span>
                         <span className="font-mono text-slate-200">
-                          {profileData.documentIssued || '2021-06-15'}
+                          2021-06-15
                         </span>
                       </div>
                     </div>
@@ -2237,6 +2580,14 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
         {/* ------------------------------------------------------------- */}
         {currentRoute === '/scan_verify' && (
           <div className="flex-1 flex flex-col justify-between bg-slate-950 relative overflow-hidden">
+            <input
+              ref={selfieFileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleSelfieFileSelected}
+              className="hidden"
+            />
+
             {screenFillLight && (
               <div
                 className="absolute inset-0 pointer-events-none z-30"
@@ -2248,7 +2599,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
             <div className="p-3.5 bg-slate-950/90 border-b border-slate-800 z-20 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-cyan-300">
-                  Face Verification
+                  Face Verification {selfieCameraActive ? '· Live Camera' : ''}
                 </span>
 
                 <button
@@ -2308,16 +2659,26 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                 </div>
               </div>
 
-              {/* Circular Guide Ring / Bracket Frame */}
+              {/* Circular Guide Ring / Bracket Frame with Real Webcam Video */}
               <div className="relative w-48 h-48 flex items-center justify-center my-1">
                 {currentAction === 'lookLeft' || currentAction === 'lookRight' ? (
-                  <div className="w-44 h-44 rounded-full border-4 border-dashed border-cyan-400 flex items-center justify-center relative shadow-[0_0_25px_rgba(56,189,248,0.25)]">
-                    <img
-                      src={applicant.avatarUrl}
-                      alt="Front Camera"
-                      className="w-38 h-38 rounded-full object-cover opacity-85"
-                    />
-                    <div className="absolute -bottom-2 bg-slate-950 px-2.5 py-0.5 rounded-full border border-cyan-400 text-[10px] text-cyan-300 font-semibold">
+                  <div className="w-44 h-44 rounded-full border-4 border-dashed border-cyan-400 flex items-center justify-center relative shadow-[0_0_25px_rgba(56,189,248,0.25)] overflow-hidden">
+                    {selfieCameraActive ? (
+                      <video
+                        ref={selfieVideoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-38 h-38 rounded-full object-cover scale-x-[-1]"
+                      />
+                    ) : (
+                      <img
+                        src={selfieImageDataUrl || applicant.avatarUrl}
+                        alt="Front Camera"
+                        className="w-38 h-38 rounded-full object-cover opacity-85"
+                      />
+                    )}
+                    <div className="absolute bottom-1 bg-slate-950/90 px-2.5 py-0.5 rounded-full border border-cyan-400 text-[9.5px] text-cyan-300 font-semibold">
                       {actionInstruction[currentAction]}
                     </div>
                   </div>
@@ -2327,11 +2688,21 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                     <div className="w-4 h-4 border-t-4 border-r-4 border-[#69F0AE] absolute top-0 right-0 animate-pulse" />
                     <div className="w-4 h-4 border-b-4 border-l-4 border-[#69F0AE] absolute bottom-0 left-0 animate-pulse" />
                     <div className="w-4 h-4 border-b-4 border-r-4 border-[#69F0AE] absolute bottom-0 right-0 animate-pulse" />
-                    <img
-                      src={applicant.avatarUrl}
-                      alt="Front Camera"
-                      className="w-36 h-36 rounded-2xl object-cover opacity-85"
-                    />
+                    {selfieCameraActive ? (
+                      <video
+                        ref={selfieVideoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-36 h-36 rounded-2xl object-cover scale-x-[-1]"
+                      />
+                    ) : (
+                      <img
+                        src={selfieImageDataUrl || applicant.avatarUrl}
+                        alt="Front Camera"
+                        className="w-36 h-36 rounded-2xl object-cover opacity-85"
+                      />
+                    )}
                     <div className="absolute -bottom-2 bg-slate-950 px-2.5 py-0.5 rounded-full border border-[#69F0AE] text-[10px] text-[#69F0AE] font-semibold">
                       {actionInstruction[currentAction]}
                     </div>
@@ -2368,14 +2739,25 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                     </span>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleInstantOneTapCapture}
-                    className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-cyan-600 via-blue-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white font-bold text-xs cursor-pointer flex items-center justify-center gap-2 shadow-lg transition-all"
-                  >
-                    <Camera className="w-4 h-4 text-white" />
-                    <span>Capture Now</span>
-                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={handleInstantOneTapCapture}
+                      className="py-2.5 px-2.5 rounded-xl bg-gradient-to-r from-cyan-600 via-blue-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white font-bold text-xs cursor-pointer flex items-center justify-center gap-1.5 shadow-lg transition-all"
+                    >
+                      <Camera className="w-3.5 h-3.5 text-white shrink-0" />
+                      <span>Capture Live</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => selfieFileInputRef.current?.click()}
+                      className="py-2.5 px-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-700 text-amber-300 font-bold text-xs cursor-pointer flex items-center justify-center gap-1.5 transition-all"
+                    >
+                      <Upload className="w-3.5 h-3.5 shrink-0" />
+                      <span>Upload Selfie</span>
+                    </button>
+                  </div>
                 </div>
               )}
 

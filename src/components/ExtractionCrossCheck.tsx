@@ -39,20 +39,45 @@ export const ExtractionCrossCheck: React.FC<ExtractionCrossCheckProps> = ({
     );
   };
 
+  const normalizeText = (val?: string) =>
+    (val || '')
+      .split('(')[0]
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .toLowerCase();
+
+  const rawLines = extractedMrzZone?.rawLines || [];
+  const safeConsistencyChecks = consistencyChecks || [];
+
   const isDobMismatch =
-    extractedVisualZone.dateOfBirth !== extractedMrzZone.dateOfBirth &&
-    Boolean(extractedMrzZone.dateOfBirth);
+    (Boolean(extractedMrzZone?.dateOfBirth) &&
+      extractedVisualZone?.dateOfBirth !== extractedMrzZone?.dateOfBirth) ||
+    (Boolean(applicant.dateOfBirth) &&
+      Boolean(extractedVisualZone?.dateOfBirth) &&
+      applicant.dateOfBirth !== extractedVisualZone?.dateOfBirth);
 
   const isNameMismatch =
     applicant.id === 'chhay_rathana' ||
-    (extractedMrzZone.rawLines[0]?.includes('CHANTREA') && extractedVisualZone.fullName.includes('CHHAY'));
+    (rawLines[0]?.includes('CHANTREA') && extractedVisualZone?.fullName?.includes('CHHAY')) ||
+    (Boolean(normalizeText(applicant.fullName)) &&
+      Boolean(normalizeText(extractedVisualZone?.fullName)) &&
+      normalizeText(applicant.fullName) !== normalizeText(extractedVisualZone?.fullName));
+
+  const isDocNumMismatch =
+    (Boolean(extractedMrzZone?.documentNumber) &&
+      extractedVisualZone?.documentNumber !== extractedMrzZone?.documentNumber) ||
+    (Boolean(normalizeText(applicant.documentNumber)) &&
+      Boolean(normalizeText(extractedVisualZone?.documentNumber)) &&
+      normalizeText(applicant.documentNumber) !== normalizeText(extractedVisualZone?.documentNumber));
 
   const fieldRows = [
     {
       label: 'Full Name',
       declared: applicant.fullName,
-      printed: extractedVisualZone.fullName,
-      mrz: isNameMismatch ? 'MEAS, CHANTREA' : extractedVisualZone.fullName,
+      printed: extractedVisualZone?.fullName || applicant.fullName,
+      mrz:
+        applicant.id === 'chhay_rathana' || rawLines[0]?.includes('CHANTREA')
+          ? 'MEAS, CHANTREA'
+          : extractedVisualZone?.fullName || applicant.fullName,
       isMismatch: isNameMismatch,
       statusNode: isNameMismatch
         ? renderStatus('FLAG', 'Name Mismatch')
@@ -62,20 +87,19 @@ export const ExtractionCrossCheck: React.FC<ExtractionCrossCheckProps> = ({
     {
       label: 'ID Number',
       declared: applicant.documentNumber,
-      printed: extractedVisualZone.documentNumber,
-      mrz: extractedMrzZone.documentNumber,
-      isMismatch: extractedVisualZone.documentNumber !== extractedMrzZone.documentNumber,
-      statusNode:
-        extractedVisualZone.documentNumber === extractedMrzZone.documentNumber
-          ? renderStatus('MATCH')
-          : renderStatus('FLAG', 'Mismatch'),
+      printed: extractedVisualZone?.documentNumber || applicant.documentNumber,
+      mrz: extractedMrzZone?.documentNumber || extractedVisualZone?.documentNumber,
+      isMismatch: isDocNumMismatch,
+      statusNode: !isDocNumMismatch
+        ? renderStatus('MATCH')
+        : renderStatus('FLAG', 'Mismatch'),
       mono: true,
     },
     {
       label: 'Date of Birth',
       declared: applicant.dateOfBirth,
-      printed: extractedVisualZone.dateOfBirth,
-      mrz: extractedMrzZone.dateOfBirth,
+      printed: extractedVisualZone?.dateOfBirth || applicant.dateOfBirth,
+      mrz: extractedMrzZone?.dateOfBirth || extractedVisualZone?.dateOfBirth,
       isMismatch: isDobMismatch,
       statusNode: isDobMismatch
         ? renderStatus('FLAG', 'Date Mismatch')
@@ -84,9 +108,9 @@ export const ExtractionCrossCheck: React.FC<ExtractionCrossCheckProps> = ({
     },
     {
       label: 'Expiry Date',
-      declared: extractedVisualZone.expiryDate,
-      printed: extractedVisualZone.expiryDate,
-      mrz: extractedMrzZone.expiryDate,
+      declared: extractedVisualZone?.expiryDate || '2033-09-12',
+      printed: extractedVisualZone?.expiryDate || '2033-09-12',
+      mrz: extractedMrzZone?.expiryDate || extractedVisualZone?.expiryDate || '2033-09-12',
       isMismatch: false,
       statusNode: renderStatus('MATCH', 'Valid'),
       mono: true,
@@ -94,11 +118,11 @@ export const ExtractionCrossCheck: React.FC<ExtractionCrossCheckProps> = ({
     {
       label: 'Country',
       declared: applicant.nationality,
-      printed: extractedVisualZone.issuingCountry,
-      mrz: extractedMrzZone.issuingState,
-      isMismatch: extractedMrzZone.issuingState === 'PHI',
+      printed: extractedVisualZone?.issuingCountry || applicant.nationality,
+      mrz: extractedMrzZone?.issuingState || applicant.nationality,
+      isMismatch: extractedMrzZone?.issuingState === 'PHI',
       statusNode:
-        extractedMrzZone.issuingState === 'PHI'
+        extractedMrzZone?.issuingState === 'PHI'
           ? renderStatus('FLAG', 'Country Code Error')
           : renderStatus('MATCH', 'Valid'),
       mono: false,
@@ -189,74 +213,42 @@ export const ExtractionCrossCheck: React.FC<ExtractionCrossCheckProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/80 font-sans text-sm">
-              {/* Full Name */}
-              <tr className="hover:bg-slate-800/40 transition-colors">
-                <td className="py-2.5 pr-2 font-semibold text-slate-200">Full Name</td>
-                <td className="py-2.5 pr-2 text-slate-300">{applicant.fullName.split('(')[0].trim()}</td>
-                <td className="py-2.5 pr-2 font-bold text-white">{extractedVisualZone.fullName.split('(')[0].trim()}</td>
-                <td className="py-2.5 pr-2 font-mono text-slate-200">
-                  {isNameMismatch ? 'MEAS, CHANTREA' : extractedVisualZone.fullName.split('(')[0].trim()}
-                </td>
-                <td className="py-2.5 text-right whitespace-nowrap">
-                  {isNameMismatch
-                    ? renderStatus('FLAG', 'Name Mismatch')
-                    : renderStatus('MATCH')}
-                </td>
-              </tr>
-
-              {/* Document Number */}
-              <tr className="hover:bg-slate-800/40 transition-colors">
-                <td className="py-2.5 pr-2 font-semibold text-slate-200">ID Number</td>
-                <td className="py-2.5 pr-2 text-slate-300 font-mono">{applicant.documentNumber}</td>
-                <td className="py-2.5 pr-2 font-mono font-bold text-cyan-300">{extractedVisualZone.documentNumber}</td>
-                <td className="py-2.5 pr-2 font-mono text-cyan-300">{extractedMrzZone.documentNumber}</td>
-                <td className="py-2.5 text-right whitespace-nowrap">
-                  {extractedVisualZone.documentNumber === extractedMrzZone.documentNumber
-                    ? renderStatus('MATCH')
-                    : renderStatus('FLAG', 'Mismatch')}
-                </td>
-              </tr>
-
-              {/* Date of Birth */}
-              <tr className={`hover:bg-slate-800/40 transition-colors ${isDobMismatch ? 'bg-red-950/30' : ''}`}>
-                <td className="py-2.5 pr-2 font-semibold text-slate-200">Date of Birth</td>
-                <td className="py-2.5 pr-2 text-slate-300 font-mono">{applicant.dateOfBirth}</td>
-                <td className={`py-2.5 pr-2 font-mono font-bold ${isDobMismatch ? 'text-red-400 underline decoration-red-500' : 'text-slate-100'}`}>
-                  {extractedVisualZone.dateOfBirth}
-                </td>
-                <td className={`py-2.5 pr-2 font-mono font-bold ${isDobMismatch ? 'text-red-300 bg-red-900/40 px-1.5 py-0.5 rounded' : 'text-slate-200'}`}>
-                  {extractedMrzZone.dateOfBirth}
-                </td>
-                <td className="py-2.5 text-right whitespace-nowrap">
-                  {isDobMismatch ? renderStatus('FLAG', 'Date Mismatch') : renderStatus('MATCH')}
-                </td>
-              </tr>
-
-              {/* Expiration Date */}
-              <tr className="hover:bg-slate-800/40 transition-colors">
-                <td className="py-2.5 pr-2 font-semibold text-slate-200">Expiry Date</td>
-                <td className="py-2.5 pr-2 text-slate-300 font-mono">{extractedVisualZone.expiryDate}</td>
-                <td className="py-2.5 pr-2 font-semibold text-slate-200 font-mono">{extractedVisualZone.expiryDate}</td>
-                <td className="py-2.5 pr-2 font-mono text-slate-300">{extractedMrzZone.expiryDate}</td>
-                <td className="py-2.5 text-right whitespace-nowrap">
-                  {renderStatus('MATCH', 'Valid')}
-                </td>
-              </tr>
-
-              {/* Issuing Authority / Country */}
-              <tr className="hover:bg-slate-800/40 transition-colors">
-                <td className="py-2.5 pr-2 font-semibold text-slate-200">Country</td>
-                <td className="py-2.5 pr-2 text-slate-300">{applicant.nationality}</td>
-                <td className="py-2.5 pr-2 text-slate-200 font-medium">{extractedVisualZone.issuingCountry}</td>
-                <td className="py-2.5 pr-2 font-mono text-slate-300">{extractedMrzZone.issuingState}</td>
-                <td className="py-2.5 text-right whitespace-nowrap">
-                  {extractedMrzZone.issuingState === 'PHI' ? (
-                    renderStatus('FLAG', 'Country Code Error')
-                  ) : (
-                    renderStatus('MATCH', 'Valid')
-                  )}
-                </td>
-              </tr>
+              {fieldRows.map((row) => (
+                <tr
+                  key={row.label}
+                  className={`hover:bg-slate-800/40 transition-colors ${
+                    row.isMismatch ? 'bg-red-950/30' : ''
+                  }`}
+                >
+                  <td className="py-2.5 pr-2 font-semibold text-slate-200">{row.label}</td>
+                  <td className={`py-2.5 pr-2 text-slate-300 ${row.mono ? 'font-mono' : ''}`}>
+                    {row.declared?.split('(')[0].trim()}
+                  </td>
+                  <td
+                    className={`py-2.5 pr-2 font-bold ${
+                      row.isMismatch
+                        ? 'text-red-400 underline decoration-red-500'
+                        : row.mono
+                        ? 'font-mono text-cyan-300'
+                        : 'text-white'
+                    }`}
+                  >
+                    {row.printed?.split('(')[0].trim()}
+                  </td>
+                  <td
+                    className={`py-2.5 pr-2 font-mono ${
+                      row.isMismatch
+                        ? 'text-red-300 bg-red-900/40 px-1.5 py-0.5 rounded font-bold'
+                        : row.mono
+                        ? 'text-cyan-300'
+                        : 'text-slate-200'
+                    }`}
+                  >
+                    {row.mrz?.split('(')[0].trim()}
+                  </td>
+                  <td className="py-2.5 text-right whitespace-nowrap">{row.statusNode}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -272,13 +264,13 @@ export const ExtractionCrossCheck: React.FC<ExtractionCrossCheckProps> = ({
             </span>
           </div>
           <span className="text-xs text-slate-400 shrink-0">
-            {consistencyChecks.filter((c) => c.status === 'PASS').length} Passed ·{' '}
-            {consistencyChecks.filter((c) => c.status === 'FAIL').length} Issues
+            {safeConsistencyChecks.filter((c) => c.status === 'PASS').length} Passed ·{' '}
+            {safeConsistencyChecks.filter((c) => c.status === 'FAIL').length} Issues
           </span>
         </div>
 
         <div className="space-y-2 min-w-0">
-          {consistencyChecks.map((check, idx) => (
+          {safeConsistencyChecks.map((check, idx) => (
             <div
               key={idx}
               className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs transition-colors min-w-0 ${

@@ -49,6 +49,27 @@ export const GeminiVerificationAuditModal: React.FC<GeminiVerificationAuditModal
   const vz = analysis.extractedVisualZone;
   const mrz = analysis.extractedMrzZone;
 
+  const normalizeField = (val?: string) =>
+    (val || '')
+      .split('(')[0]
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .toLowerCase();
+
+  const declaredName = profileData.fullName || applicant.fullName;
+  const extractedName = vz?.fullName || declaredName;
+  const declaredDoc = profileData.documentNumber || applicant.documentNumber;
+  const extractedDoc = vz?.documentNumber || declaredDoc;
+
+  const hasFieldDiscrepancy =
+    (Boolean(normalizeField(declaredName)) &&
+      Boolean(normalizeField(extractedName)) &&
+      normalizeField(declaredName) !== normalizeField(extractedName)) ||
+    (Boolean(normalizeField(declaredDoc)) &&
+      Boolean(normalizeField(extractedDoc)) &&
+      normalizeField(declaredDoc) !== normalizeField(extractedDoc)) ||
+    mrz?.checksumValid === false ||
+    (analysis.fraudSignals && analysis.fraudSignals.length > 0);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
       <div className="bg-slate-900 border border-slate-700/80 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl relative overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -139,7 +160,13 @@ export const GeminiVerificationAuditModal: React.FC<GeminiVerificationAuditModal
                     <Sparkles className="w-3.5 h-3.5" />
                     <span>Gemini Extracted Text (OCR)</span>
                   </span>
-                  <span className="text-[10px] text-emerald-300 font-mono">100% Match</span>
+                  <span
+                    className={`text-[10px] font-mono ${
+                      hasFieldDiscrepancy ? 'text-amber-300' : 'text-emerald-300'
+                    }`}
+                  >
+                    {hasFieldDiscrepancy ? 'Needs Review' : '100% Match'}
+                  </span>
                 </div>
                 <div className="space-y-1.5 text-[11px]">
                   <div className="flex justify-between">
@@ -172,8 +199,14 @@ export const GeminiVerificationAuditModal: React.FC<GeminiVerificationAuditModal
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-slate-400">MRZ &amp; Checksums:</span>
-                    <span className="font-mono text-[10px] text-emerald-400 font-bold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/30">
-                      {mrz?.checksumValid ? '✓ Valid Checksum' : '✓ Verified Valid'}
+                    <span
+                      className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                        mrz?.checksumValid === false
+                          ? 'text-red-300 bg-red-950/60 border-red-500/30'
+                          : 'text-emerald-400 bg-emerald-950/60 border-emerald-500/30'
+                      }`}
+                    >
+                      {mrz?.checksumValid === false ? '✗ Checksum Mismatch' : '✓ Valid Checksum'}
                     </span>
                   </div>
                 </div>
@@ -181,15 +214,37 @@ export const GeminiVerificationAuditModal: React.FC<GeminiVerificationAuditModal
             </div>
 
             {/* Consistency Check Banner */}
-            <div className="mt-2.5 p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 flex items-center justify-between gap-2">
+            <div
+              className={`mt-2.5 p-2.5 rounded-xl border flex items-center justify-between gap-2 ${
+                hasFieldDiscrepancy
+                  ? 'bg-amber-950/40 border-amber-500/30'
+                  : 'bg-emerald-950/40 border-emerald-500/30'
+              }`}
+            >
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span className="text-xs text-emerald-200">
-                  <strong>Zero Discrepancies:</strong> Declared profile data, extracted visual OCR, and MRZ checksums are completely consistent.
+                <CheckCircle2
+                  className={`w-4 h-4 shrink-0 ${
+                    hasFieldDiscrepancy ? 'text-amber-400' : 'text-emerald-400'
+                  }`}
+                />
+                <span className={`text-xs ${hasFieldDiscrepancy ? 'text-amber-200' : 'text-emerald-200'}`}>
+                  {hasFieldDiscrepancy ? (
+                    <>
+                      <strong>Review Needed:</strong> Gemini detected differences or risk signals between declared profile data and the ID document.
+                    </>
+                  ) : (
+                    <>
+                      <strong>Zero Discrepancies:</strong> Declared profile data, extracted visual OCR, and MRZ checksums are completely consistent.
+                    </>
+                  )}
                 </span>
               </div>
-              <span className="text-[10.5px] font-mono text-emerald-300 font-bold shrink-0">
-                Cross-Check: PASS
+              <span
+                className={`text-[10.5px] font-mono font-bold shrink-0 ${
+                  hasFieldDiscrepancy ? 'text-amber-300' : 'text-emerald-300'
+                }`}
+              >
+                {hasFieldDiscrepancy ? 'Cross-Check: FLAG' : 'Cross-Check: PASS'}
               </span>
             </div>
           </div>
