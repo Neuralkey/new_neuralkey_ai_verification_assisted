@@ -1,23 +1,38 @@
 import React, { useEffect, useState } from 'react';
-import { History, ShieldCheck, Link2, RefreshCw, CheckCircle2, AlertTriangle, XCircle, Search, ExternalLink } from 'lucide-react';
+import {
+  History,
+  RefreshCw,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  Search,
+  Clock,
+  UserCheck,
+} from 'lucide-react';
 import { AuditRecord } from '../types';
 
 interface AuditLedgerModalProps {
   onClose?: () => void;
+  externalLogs?: AuditRecord[];
+  onRefresh?: () => void;
 }
 
-export const AuditLedgerModal: React.FC<AuditLedgerModalProps> = ({ onClose }) => {
-  const [logs, setLogs] = useState<AuditRecord[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+export const AuditLedgerModal: React.FC<AuditLedgerModalProps> = ({
+  externalLogs,
+  onRefresh,
+}) => {
+  const [internalLogs, setInternalLogs] = useState<AuditRecord[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [filterText, setFilterText] = useState<string>('');
+  const [actionFilter, setActionFilter] = useState<'ALL' | 'APPROVED' | 'ESCALATED' | 'REJECTED'>('ALL');
 
   const fetchLogs = async () => {
     setIsLoading(true);
     try {
       const res = await fetch('/api/audit-log');
       const data = await res.json();
-      if (data.success && data.log) {
-        setLogs(data.log);
+      if (data.success && Array.isArray(data.log)) {
+        setInternalLogs(data.log);
       }
     } catch (e) {
       console.error('Failed to fetch audit log', e);
@@ -28,123 +43,173 @@ export const AuditLedgerModal: React.FC<AuditLedgerModalProps> = ({ onClose }) =
 
   useEffect(() => {
     fetchLogs();
-  }, []);
+  }, [externalLogs?.length]);
 
-  const filteredLogs = logs.filter(
-    (l) =>
-      l.applicantName.toLowerCase().includes(filterText.toLowerCase()) ||
-      l.applicantDid.toLowerCase().includes(filterText.toLowerCase()) ||
-      l.action.toLowerCase().includes(filterText.toLowerCase()) ||
-      l.notes.toLowerCase().includes(filterText.toLowerCase())
-  );
+  const logs = externalLogs && externalLogs.length > 0 ? externalLogs : internalLogs;
+
+  const filteredLogs = logs.filter((l) => {
+    if (actionFilter !== 'ALL' && l.action !== actionFilter) return false;
+    if (!filterText.trim()) return true;
+    const q = filterText.toLowerCase();
+    return (
+      l.applicantName.toLowerCase().includes(q) ||
+      l.action.toLowerCase().includes(q) ||
+      l.notes.toLowerCase().includes(q) ||
+      l.reviewerId.toLowerCase().includes(q)
+    );
+  });
+
+  const handleRefreshClick = () => {
+    fetchLogs();
+    if (onRefresh) onRefresh();
+  };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-4">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+          <h2 className="text-base font-bold text-white flex items-center gap-2">
             <History className="w-4 h-4 text-emerald-400" />
-            <span>Review History</span>
+            <span>Audit Log</span>
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5 max-w-xl">
-            Record of completed identity verification reviews and decisions.
+          <p className="text-xs text-slate-400 mt-0.5">
+            Every Approve, Escalate, and Reject decision in the Reviewer Console is recorded here.
           </p>
         </div>
 
         <button
-          onClick={fetchLogs}
-          className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer transition-colors flex items-center gap-1.5 text-xs font-medium"
-          title="Refresh history"
+          type="button"
+          onClick={handleRefreshClick}
+          className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer transition-colors flex items-center gap-1.5 text-xs font-semibold"
+          title="Refresh audit log"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
           <span>Refresh</span>
         </button>
       </div>
 
-      {/* Filter and Stats */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800 text-xs min-w-0">
-        <div className="relative flex-1 min-w-[200px] w-full sm:max-w-sm">
-          <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
+      {/* Search & Action Filter Bar */}
+      <div className="bg-slate-900/70 p-3 rounded-2xl border border-slate-800/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 text-xs">
+        <div className="relative flex-1">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
           <input
             type="text"
             value={filterText}
             onChange={(e) => setFilterText(e.target.value)}
-            placeholder="Search by applicant name, status, or notes..."
-            className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-slate-200 text-xs focus:outline-none focus:border-blue-500"
+            placeholder="Search by applicant name, action, or notes..."
+            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-slate-200 text-xs focus:outline-none focus:border-blue-500"
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-slate-400 text-xs">
-          <span>Total Reviews: <strong className="text-white">{logs.length}</strong></span>
+        <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 shrink-0">
+          {(['ALL', 'APPROVED', 'ESCALATED', 'REJECTED'] as const).map((act) => (
+            <button
+              key={act}
+              type="button"
+              onClick={() => setActionFilter(act)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
+                actionFilter === act
+                  ? 'bg-blue-600 text-white'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {act === 'ALL'
+                ? `All (${logs.length})`
+                : act === 'APPROVED'
+                ? 'Approved'
+                : act === 'ESCALATED'
+                ? 'Escalated'
+                : 'Rejected'}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Review Entries */}
-      <div className="space-y-2.5 min-w-0">
-        {filteredLogs.map((entry) => {
-          const isApprove = entry.action === 'APPROVED';
-          const isReject = entry.action === 'REJECTED';
+      {/* Audit Log Entries */}
+      <div className="space-y-2.5">
+        {filteredLogs.length === 0 ? (
+          <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-8 text-center text-xs text-slate-400">
+            No matching audit log records found.
+          </div>
+        ) : (
+          filteredLogs.map((entry) => {
+            const isApprove = entry.action === 'APPROVED';
+            const isReject = entry.action === 'REJECTED';
 
-          return (
-            <div
-              key={entry.id}
-              className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-sm text-xs relative overflow-hidden min-w-0 space-y-2.5"
-            >
-              {/* Top Row: Applicant Name, Decision Status, and Time */}
-              <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800/80 min-w-0">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="font-bold text-slate-100 text-sm truncate">
-                    {entry.applicantName.split('(')[0].trim()}
-                  </span>
+            return (
+              <div
+                key={entry.id}
+                className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-4 text-xs space-y-2.5 transition-colors hover:border-slate-700"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-slate-800/70">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {isApprove ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    ) : isReject ? (
+                      <XCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                    )}
+                    <span className="font-bold text-white text-sm truncate">
+                      {entry.applicantName.split('(')[0].trim()}
+                    </span>
+                    <span
+                      className={`font-semibold px-2 py-0.5 rounded-md text-[11px] ${
+                        isApprove
+                          ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                          : isReject
+                          ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                          : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                      }`}
+                    >
+                      {isApprove ? 'Approved' : isReject ? 'Rejected' : 'Escalated'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3 text-slate-400 text-[11px] shrink-0">
+                    <span className="flex items-center gap-1">
+                      <UserCheck className="w-3 h-3 text-slate-500" />
+                      <span>Reviewer {entry.reviewerId}</span>
+                    </span>
+                    <span className="flex items-center gap-1 font-mono">
+                      <Clock className="w-3 h-3 text-slate-500" />
+                      <span>
+                        {new Date(entry.timestamp).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit',
+                        })}
+                      </span>
+                    </span>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2.5 shrink-0">
-                  <span
-                    className={`font-semibold px-2.5 py-0.5 rounded-md text-xs ${
-                      isApprove
-                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                        : isReject
-                        ? 'bg-red-500/20 text-red-300 border border-red-500/30'
-                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                    }`}
-                  >
-                    {isApprove ? 'Approved' : isReject ? 'Rejected' : 'Escalated'}
-                  </span>
-                  <span className="text-xs text-slate-400 font-mono">
-                    {new Date(entry.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-              </div>
-
-              {/* Notes and Risk Summary */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-center min-w-0">
-                <div className="md:col-span-3 space-y-1 min-w-0">
-                  <span className="text-[11px] text-slate-400 block font-medium">Review Notes</span>
-                  <p className="text-slate-200 text-xs leading-relaxed bg-slate-950 p-2.5 rounded-xl border border-slate-800/80 break-words">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <p className="text-slate-200 text-xs leading-relaxed flex-1">
                     {entry.notes}
                   </p>
-                </div>
-
-                <div className="bg-slate-950 p-2.5 rounded-xl border border-slate-800/80 flex md:flex-col justify-between gap-1 text-xs min-w-0">
-                  <span className="text-slate-400 text-[11px]">Risk Score</span>
-                  <span
-                    className={`font-bold font-mono text-sm ${
-                      entry.riskScore <= 30
-                        ? 'text-emerald-400'
-                        : entry.riskScore <= 70
-                        ? 'text-amber-400'
-                        : 'text-red-400'
-                    }`}
-                  >
-                    {entry.riskScore} / 100
-                  </span>
+                  <div className="flex items-center gap-3 shrink-0 text-[11px] text-slate-400 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800/80">
+                    <span>Risk Score:</span>
+                    <span
+                      className={`font-bold font-mono ${
+                        entry.riskScore <= 30
+                          ? 'text-emerald-400'
+                          : entry.riskScore <= 70
+                          ? 'text-amber-400'
+                          : 'text-rose-400'
+                      }`}
+                    >
+                      {entry.riskScore}/100
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        )}
       </div>
     </div>
   );
 };
+

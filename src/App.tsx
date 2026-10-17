@@ -10,7 +10,6 @@ import { ApplicantWallet } from './components/ApplicantWallet';
 import { RelyingPartyBank } from './components/RelyingPartyBank';
 import { NeuralkeySpecModal } from './components/NeuralkeySpecModal';
 import { AboutDemoModal } from './components/AboutDemoModal';
-import { GeminiVerificationAuditModal } from './components/GeminiVerificationAuditModal';
 import { INITIAL_PRESETS, PRESET_ANALYSES } from './data/mockScenarios';
 import { ApplicantProfile, ForensicAnalysis, VerifiableCredential } from './types';
 import { generateNeuralkeyUserDid } from './utils/didResolver';
@@ -37,15 +36,6 @@ export default function App() {
   const [customDocUrl, setCustomDocUrl] = useState<string | undefined>(undefined);
   const [customSelfieUrl, setCustomSelfieUrl] = useState<string | undefined>(undefined);
 
-  // Gemini verification audit modal state (shown after wallet verify submission)
-  const [auditModalData, setAuditModalData] = useState<{
-    isOpen: boolean;
-    applicant?: ApplicantProfile;
-    analysis?: ForensicAnalysis;
-    profileData?: any;
-    livenessScores?: any;
-  }>({ isOpen: false });
-
   // Modals state
   const [showSpecModal, setShowSpecModal] = useState<boolean>(false);
   const [showAboutModal, setShowAboutModal] = useState<boolean>(false);
@@ -71,7 +61,6 @@ export default function App() {
     setCustomDocUrl(undefined);
     setCustomSelfieUrl(undefined);
     setGlobalError(null);
-    setAuditModalData({ isOpen: false });
   };
 
   // Active applicant and analysis
@@ -117,12 +106,12 @@ export default function App() {
       setQueue((prev) =>
         prev.map((q) =>
           q.id === activeApplicant.id
-            ? { ...q, status: 'APPROVED', trustLevel: 'TIER_3_IAL3_VERIFIED' }
+            ? { ...q, status: 'APPROVED', trustLevel: 'TIER_2_IAL2_VERIFIED' }
             : q
         )
       );
       try {
-        localStorage.setItem(`${activeApplicant.id}_trustLevel`, 'TIER_3_IAL3_VERIFIED');
+        localStorage.setItem(`${activeApplicant.id}_trustLevel`, 'TIER_2_IAL2_VERIFIED');
       } catch {}
     } catch (err) {
       console.error('Approval failed:', err);
@@ -133,12 +122,12 @@ export default function App() {
       setQueue((prev) =>
         prev.map((q) =>
           q.id === activeApplicant.id
-            ? { ...q, status: 'APPROVED', trustLevel: 'TIER_3_IAL3_VERIFIED' }
+            ? { ...q, status: 'APPROVED', trustLevel: 'TIER_2_IAL2_VERIFIED' }
             : q
         )
       );
       try {
-        localStorage.setItem(`${activeApplicant.id}_trustLevel`, 'TIER_3_IAL3_VERIFIED');
+        localStorage.setItem(`${activeApplicant.id}_trustLevel`, 'TIER_2_IAL2_VERIFIED');
       } catch {}
     } finally {
       setIsProcessingDecision(false);
@@ -220,6 +209,7 @@ export default function App() {
     docImageBase64: string;
     docBackImageBase64?: string;
     selfieImageBase64: string;
+    livenessFrames?: Partial<Record<'lookLeft' | 'lookRight' | 'smile' | 'blink', string>>;
     livenessScores: {
       lookLeft: number;
       lookRight: number;
@@ -244,22 +234,8 @@ export default function App() {
       const nextCaseNumber = maxCase + 1;
 
       const customId = `case_${nextCaseNumber}`;
-      const defaultPortraitUrl =
-        'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=400&q=80';
-      const resolvedSelfieUrl = submission.selfieImageBase64 || defaultPortraitUrl;
-      const syntheticCardSvg = generateSyntheticCardSvg({
-        countryCode: 'KHM',
-        countryName: 'Kingdom of Cambodia',
-        docType: submission.profileData.documentType || 'National Identity Card',
-        fullName: submission.profileData.fullName,
-        documentNumber: submission.profileData.documentNumber,
-        dateOfBirth: submission.profileData.dateOfBirth,
-        expiryDate: submission.profileData.documentExpiry || '2033-09-12',
-        gender: submission.profileData.gender || 'Male',
-        avatarUrl: resolvedSelfieUrl,
-        caseNumber: nextCaseNumber,
-      });
-      const resolvedDocUrl = submission.docImageBase64 || syntheticCardSvg;
+      const resolvedSelfieUrl = submission.selfieImageBase64;
+      const resolvedDocUrl = submission.docImageBase64;
 
       const newApplicant: ApplicantProfile = {
         id: customId,
@@ -274,9 +250,11 @@ export default function App() {
         avatarUrl: resolvedSelfieUrl,
         selfieUrl: resolvedSelfieUrl,
         documentSvgOrUrl: resolvedDocUrl,
+        documentBackUrl: submission.docBackImageBase64,
+        livenessFrames: submission.livenessFrames,
         expectedOutcome: 'APPROVE',
-        scenarioTag: `Case ${nextCaseNumber} · KH ${submission.profileData.documentType} (Tier 1 → Tier 3 Upgrade)`,
-        scenarioDescription: `Identity verification submitted live from mobile wallet. Step 1 Profile, Step 2 Government ID OCR, and Step 3 Active Biometric Liveness verified.`,
+        scenarioTag: `Case ${nextCaseNumber} · KH ${submission.profileData.documentType} (Live Camera Submission)`,
+        scenarioDescription: `Real human live camera verification submitted from mobile wallet. Step 1 Profile, Step 2 Government ID Camera Capture, and Step 3 Active Biometric Liveness Camera Capture analyzed.`,
         status: 'PENDING',
         trustLevel: 'TIER_1_BASIC',
       };
@@ -288,8 +266,7 @@ export default function App() {
         localStorage.setItem(`${customId}_faceScanDone`, 'true');
       } catch {}
 
-      const isUploadedRaster = /^data:image\/(png|jpeg|jpg|webp|gif);base64,/i.test(resolvedDocUrl);
-      setCustomDocUrl(isUploadedRaster ? resolvedDocUrl : '');
+      setCustomDocUrl(resolvedDocUrl);
       setCustomSelfieUrl(resolvedSelfieUrl);
 
       // Fallback structure only if server is unreachable
@@ -353,6 +330,8 @@ export default function App() {
             documentImageBase64: submission.docImageBase64,
             documentBackImageBase64: submission.docBackImageBase64,
             selfieImageBase64: submission.selfieImageBase64,
+            livenessFrames: submission.livenessFrames,
+            livenessScores: submission.livenessScores,
             applicantData: {
               fullName: submission.profileData.fullName,
               dateOfBirth: submission.profileData.dateOfBirth,
@@ -377,15 +356,6 @@ export default function App() {
       }));
       setQueue((prev) => [newApplicant, ...prev]);
       setActiveApplicantId(customId);
-
-      // Open the Gemini Verification & Scoring Audit Modal with live Gemini output
-      setAuditModalData({
-        isOpen: true,
-        applicant: newApplicant,
-        analysis: resolvedAnalysis,
-        profileData: submission.profileData,
-        livenessScores: submission.livenessScores,
-      });
     } catch (e) {
       console.error('Submission processing error:', e);
       setGlobalError('Verification submission recorded. Ready for review in Reviewer Console.');
@@ -514,33 +484,6 @@ export default function App() {
       </main>
 
       {/* Modals */}
-      {auditModalData.isOpen && auditModalData.applicant && auditModalData.analysis && (
-        <GeminiVerificationAuditModal
-          isOpen={auditModalData.isOpen}
-          onClose={() => setAuditModalData((prev) => ({ ...prev, isOpen: false }))}
-          applicant={auditModalData.applicant}
-          analysis={auditModalData.analysis}
-          profileData={
-            auditModalData.profileData || {
-              fullName: auditModalData.applicant.fullName,
-              dateOfBirth: auditModalData.applicant.dateOfBirth,
-              documentNumber: auditModalData.applicant.documentNumber,
-              documentType: auditModalData.applicant.documentType,
-              country: 'Cambodia',
-            }
-          }
-          livenessScores={auditModalData.livenessScores}
-          onNavigateToReviewerConsole={() => {
-            const targetApplicantId = auditModalData.applicant?.id;
-            setAuditModalData((prev) => ({ ...prev, isOpen: false }));
-            if (targetApplicantId) {
-              setActiveApplicantId(targetApplicantId);
-            }
-            setCurrentTab('console');
-          }}
-        />
-      )}
-
       <AboutDemoModal
         isOpen={showAboutModal}
         onClose={() => setShowAboutModal(false)}

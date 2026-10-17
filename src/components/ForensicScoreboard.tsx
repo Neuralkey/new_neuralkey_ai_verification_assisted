@@ -273,10 +273,30 @@ export const ForensicScoreboard: React.FC<ForensicScoreboardProps> = ({
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {[
-                { label: 'Look Left', score: scores.lookLeft },
-                { label: 'Look Right', score: scores.lookRight },
-                { label: 'Smile Naturally', score: scores.smile },
-                { label: 'Blink Eyes', score: scores.blink },
+                {
+                  key: 'lookLeft' as const,
+                  label: 'Look Left',
+                  score: scores.lookLeft,
+                  frame: applicant.livenessFrames?.lookLeft || safeSelfieUrl,
+                },
+                {
+                  key: 'lookRight' as const,
+                  label: 'Look Right',
+                  score: scores.lookRight,
+                  frame: applicant.livenessFrames?.lookRight || safeSelfieUrl,
+                },
+                {
+                  key: 'smile' as const,
+                  label: 'Smile Naturally',
+                  score: scores.smile,
+                  frame: applicant.livenessFrames?.smile || safeSelfieUrl,
+                },
+                {
+                  key: 'blink' as const,
+                  label: 'Blink Eyes',
+                  score: scores.blink,
+                  frame: applicant.livenessFrames?.blink || safeSelfieUrl,
+                },
               ].map((challenge, idx) => {
                 const pct = Math.round(challenge.score * 100);
                 return (
@@ -284,13 +304,12 @@ export const ForensicScoreboard: React.FC<ForensicScoreboardProps> = ({
                     key={challenge.label}
                     className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-center space-y-1.5"
                   >
-                    <div className="w-11 h-11 rounded-full mx-auto overflow-hidden border border-cyan-500/40 bg-slate-950 relative">
+                    <div className="w-12 h-12 rounded-full mx-auto overflow-hidden border border-cyan-500/40 bg-slate-950 relative">
                       <img
-                        src={safeSelfieUrl}
+                        src={challenge.frame}
                         alt={challenge.label}
                         className="w-full h-full object-cover"
                       />
-                      <div className="absolute inset-0 bg-cyan-500/10" />
                     </div>
                     <span className="text-[10px] font-semibold text-slate-200 block truncate">
                       {idx + 1}. {challenge.label}
@@ -310,17 +329,32 @@ export const ForensicScoreboard: React.FC<ForensicScoreboardProps> = ({
             </div>
           </div>
 
-          {/* Synthetic ID Card vs Live Selfie Visual Comparison Strip */}
+          {/* Captured ID Card (Front & Back) vs Live Selfie Visual Comparison Strip */}
           <div className="p-2.5 rounded-lg bg-slate-900/90 border border-slate-800 flex flex-wrap items-center justify-between gap-2.5">
             <div className="flex items-center gap-2.5 min-w-0">
-              {/* Synthetic ID Document Thumbnail */}
-              <div className="w-20 h-12 rounded-lg overflow-hidden border border-cyan-500/40 bg-slate-950 shrink-0 shadow-sm">
+              {/* Captured Front ID Document Thumbnail */}
+              <div className="w-20 h-12 rounded-lg overflow-hidden border border-cyan-500/40 bg-slate-950 shrink-0 shadow-sm relative">
                 <img
                   src={safeDocPreviewUrl}
-                  alt="Synthetic ID Card"
+                  alt="Captured Front ID"
                   className="w-full h-full object-cover"
                 />
+                <span className="absolute bottom-0 left-0 right-0 bg-black/70 text-[8px] font-mono text-cyan-300 text-center">
+                  ID FRONT
+                </span>
               </div>
+              {applicant.documentBackUrl && (
+                <div className="w-20 h-12 rounded-lg overflow-hidden border border-indigo-500/40 bg-slate-950 shrink-0 shadow-sm relative">
+                  <img
+                    src={applicant.documentBackUrl}
+                    alt="Captured Back ID"
+                    className="w-full h-full object-cover"
+                  />
+                  <span className="absolute bottom-0 left-0 right-0 bg-black/70 text-[8px] font-mono text-indigo-300 text-center">
+                    ID BACK
+                  </span>
+                </div>
+              )}
               <ChevronRight className="w-4 h-4 text-slate-500 shrink-0 hidden sm:block" />
               {/* Live Verified Selfie Thumbnail */}
               <div className="w-12 h-12 rounded-lg overflow-hidden border border-emerald-500/50 bg-slate-950 shrink-0 relative">
@@ -333,17 +367,17 @@ export const ForensicScoreboard: React.FC<ForensicScoreboardProps> = ({
               </div>
               <div className="min-w-0">
                 <span className="text-[11px] font-bold text-white block truncate">
-                  Synthetic ID Portrait vs. Live Selfie ({faceMatchPct}% Match)
+                  Captured ID Portrait vs. Live Camera Selfie ({faceMatchPct}% Match)
                 </span>
                 <span className="text-[10px] text-slate-400 block truncate">
-                  Cosine Distance: 0.12 · Active 3D liveness verified
+                  {analysis.biometricAnalysis.notes || 'Active 3D liveness & optical cross-check'}
                 </span>
               </div>
             </div>
 
             <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0 flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3" />
-              <span>Verified</span>
+              <span>{analysis.biometricAnalysis.faceMatchStatus || 'Verified'}</span>
             </span>
           </div>
         </div>

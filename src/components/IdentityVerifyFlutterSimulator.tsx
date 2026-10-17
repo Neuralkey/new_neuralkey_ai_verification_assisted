@@ -50,6 +50,12 @@ interface IdentityVerifyFlutterSimulatorProps {
     docImageBase64: string;
     docBackImageBase64?: string;
     selfieImageBase64: string;
+    livenessFrames?: {
+      lookLeft?: string;
+      lookRight?: string;
+      smile?: string;
+      blink?: string;
+    };
     livenessScores: {
       lookLeft: number;
       lookRight: number;
@@ -81,18 +87,23 @@ const STORAGE_KEYS = {
   // Step 2 Document file paths in app documents dir
   GOV_DOC_FRONT_PATH: 'govDocFrontPath',
   GOV_DOC_BACK_PATH: 'govDocBackPath',
+  GOV_DOC_FRONT_DATA: 'govDocFrontDataUrl',
+  GOV_DOC_BACK_DATA: 'govDocBackDataUrl',
   // Step 3 Liveness still photo paths in app documents dir
   LIVENESS_LEFT_PATH: 'liveness_lookLeft',
   LIVENESS_RIGHT_PATH: 'liveness_lookRight',
   LIVENESS_SMILE_PATH: 'liveness_smile',
   LIVENESS_BLINK_PATH: 'liveness_blink',
   PROFILE_SELFIE_PATH: 'profileSelfiePath',
+  SELFIE_DATA_URL: 'selfieDataUrl',
+  LIVENESS_FRAMES_JSON: 'livenessFramesJson',
   LIVENESS_SCORE: 'livenessMeanScore',
   // V2 VC & Audit log
   V2_VC: 'v2VerifiableCredential',
   V2_VC_JSON: 'v2VerifiableCredential',
   TRUST_LEVEL: 'trustLevel',
   AUDIT_LOG: 'auditLog',
+  SUBMITTED_FOR_REVIEW: 'submittedForReview',
 };
 
 export type ProfileDocType = 'ID Card' | 'Passport' | 'Driver License';
@@ -309,6 +320,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   const [userUpdatedProfile, setUserUpdatedProfile] = useState<boolean>(false);
   const [govDocDone, setGovDocDone] = useState<boolean>(false);
   const [faceScanDone, setFaceScanDone] = useState<boolean>(false);
+  const [isSubmittedForReview, setIsSubmittedForReview] = useState<boolean>(false);
 
   const getDefaultFirstLast = () => {
     const clean = applicant.fullName.split('(')[0].trim();
@@ -374,6 +386,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   const [frontImageDataUrl, setFrontImageDataUrl] = useState<string | null>(null);
   const [backImageDataUrl, setBackImageDataUrl] = useState<string | null>(null);
   const [docCameraActive, setDocCameraActive] = useState<boolean>(false);
+  const [docCameraError, setDocCameraError] = useState<string | null>(null);
   const docVideoRef = useRef<HTMLVideoElement | null>(null);
   const docStreamRef = useRef<MediaStream | null>(null);
   const [hasImageOnDisk, setHasImageOnDisk] = useState<boolean>(true);
@@ -386,7 +399,15 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   const [faceDetected, setFaceDetected] = useState<boolean>(true);
   const [screenFillLight, setScreenFillLight] = useState<boolean>(false);
   const [selfieImageDataUrl, setSelfieImageDataUrl] = useState<string | null>(null);
+  const [livenessFrames, setLivenessFrames] = useState<{
+    lookLeft?: string;
+    lookRight?: string;
+    smile?: string;
+    blink?: string;
+  }>({});
   const [selfieCameraActive, setSelfieCameraActive] = useState<boolean>(false);
+  const [selfieVideoReady, setSelfieVideoReady] = useState<boolean>(false);
+  const [selfieCameraError, setSelfieCameraError] = useState<string | null>(null);
   const selfieVideoRef = useRef<HTMLVideoElement | null>(null);
   const selfieStreamRef = useRef<MediaStream | null>(null);
   const [actionScores, setActionScores] = useState<Record<LivenessAction, number>>({
@@ -430,6 +451,22 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
 
   const sKey = (k: string) => `${applicant.id}_${k}`;
 
+  const attachDocVideoRef = (el: HTMLVideoElement | null) => {
+    docVideoRef.current = el;
+    if (el && docStreamRef.current && el.srcObject !== docStreamRef.current) {
+      el.srcObject = docStreamRef.current;
+      el.play().catch(() => {});
+    }
+  };
+
+  const attachSelfieVideoRef = (el: HTMLVideoElement | null) => {
+    selfieVideoRef.current = el;
+    if (el && selfieStreamRef.current && el.srcObject !== selfieStreamRef.current) {
+      el.srcObject = selfieStreamRef.current;
+      el.play().catch(() => {});
+    }
+  };
+
   const stopDocCamera = () => {
     if (docStreamRef.current) {
       docStreamRef.current.getTracks().forEach((t) => t.stop());
@@ -441,20 +478,30 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   const startDocCamera = async () => {
     try {
       stopDocCamera();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: false,
-      });
+      setDocCameraError(null);
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+      }
       docStreamRef.current = stream;
       setDocCameraActive(true);
-      setTimeout(() => {
-        if (docVideoRef.current) {
-          docVideoRef.current.srcObject = stream;
-          docVideoRef.current.play().catch(() => {});
-        }
-      }, 50);
-    } catch {
+      if (docVideoRef.current) {
+        docVideoRef.current.srcObject = stream;
+        docVideoRef.current.play().catch(() => {});
+      }
+    } catch (err: any) {
       setDocCameraActive(false);
+      setDocCameraError(
+        err?.message || 'Camera permission denied or no camera hardware detected.'
+      );
     }
   };
 
@@ -464,25 +511,37 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
       selfieStreamRef.current = null;
     }
     setSelfieCameraActive(false);
+    setSelfieVideoReady(false);
   };
 
   const startSelfieCamera = async () => {
     try {
       stopSelfieCamera();
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 640 } },
-        audio: false,
-      });
+      setSelfieCameraError(null);
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'user' }, width: { ideal: 640 }, height: { ideal: 640 } },
+          audio: false,
+        });
+      } catch {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false,
+        });
+      }
       selfieStreamRef.current = stream;
       setSelfieCameraActive(true);
-      setTimeout(() => {
-        if (selfieVideoRef.current) {
-          selfieVideoRef.current.srcObject = stream;
-          selfieVideoRef.current.play().catch(() => {});
-        }
-      }, 50);
-    } catch {
+      if (selfieVideoRef.current) {
+        selfieVideoRef.current.srcObject = stream;
+        selfieVideoRef.current.play().catch(() => {});
+      }
+    } catch (err: any) {
       setSelfieCameraActive(false);
+      setSelfieVideoReady(false);
+      setSelfieCameraError(
+        err?.message || 'Camera permission denied or no camera hardware detected.'
+      );
     }
   };
 
@@ -655,18 +714,40 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
 
   const isLevel3Approved =
     decisionStatus === 'APPROVED' ||
-    applicant.trustLevel === 'TIER_3_IAL3_VERIFIED' ||
-    serverTrustLevel === 'TIER_3_IAL3_VERIFIED';
+    (decisionStatus !== 'REJECTED' &&
+      decisionStatus !== 'ESCALATED' &&
+      (applicant.trustLevel === 'TIER_2_IAL2_VERIFIED' ||
+        serverTrustLevel === 'TIER_2_IAL2_VERIFIED' ||
+        applicant.trustLevel === 'TIER_3_IAL3_VERIFIED' ||
+        serverTrustLevel === 'TIER_3_IAL3_VERIFIED'));
+
+  const hasSubmitted = isSubmittedForReview || applicant.id.startsWith('case_');
+
+  // Lock screen whenever submitted and awaiting reviewer action, or when escalated
+  const isWalletLocked =
+    hasSubmitted &&
+    decisionStatus !== 'APPROVED' &&
+    decisionStatus !== 'REJECTED' &&
+    !isLevel3Approved;
 
   const syncTrustLevelNow = async () => {
     try {
       const storedTier = localStorage.getItem(sKey(STORAGE_KEYS.TRUST_LEVEL));
+      if (decisionStatus === 'REJECTED' || decisionStatus === 'ESCALATED') {
+        setServerTrustLevel('TIER_1_BASIC');
+        setLastTrustSyncTime(
+          new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        );
+        return;
+      }
       if (
         decisionStatus === 'APPROVED' ||
+        applicant.trustLevel === 'TIER_2_IAL2_VERIFIED' ||
+        storedTier === 'TIER_2_IAL2_VERIFIED' ||
         applicant.trustLevel === 'TIER_3_IAL3_VERIFIED' ||
         storedTier === 'TIER_3_IAL3_VERIFIED'
       ) {
-        setServerTrustLevel('TIER_3_IAL3_VERIFIED');
+        setServerTrustLevel('TIER_2_IAL2_VERIFIED');
         setLastTrustSyncTime(
           new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         );
@@ -688,6 +769,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   };
 
   useEffect(() => {
+    reloadStorage();
     syncTrustLevelNow();
     const interval = setInterval(syncTrustLevelNow, 5 * 60 * 1000);
     const onFocus = () => syncTrustLevelNow();
@@ -698,20 +780,80 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
     };
   }, [applicant.id, applicant.did, decisionStatus, applicant.trustLevel]);
 
+  // Automatically route wallet screen when reviewer performs an action
+  useEffect(() => {
+    if (decisionStatus === 'APPROVED' || (hasSubmitted && isLevel3Approved)) {
+      setCurrentRoute('/home');
+    } else if (decisionStatus === 'REJECTED') {
+      setCurrentRoute('/verify');
+    }
+  }, [decisionStatus, isLevel3Approved, hasSubmitted, applicant.id]);
+
   const reloadStorage = () => {
     try {
       const p = localStorage.getItem(sKey(STORAGE_KEYS.PROFILE_DONE)) === 'true';
       const rawD = localStorage.getItem(sKey(STORAGE_KEYS.GOV_DOC_DONE)) === 'true';
       const rawF = localStorage.getItem(sKey(STORAGE_KEYS.FACE_SCAN_DONE)) === 'true';
+      const rawSubmitted =
+        localStorage.getItem(sKey(STORAGE_KEYS.SUBMITTED_FOR_REVIEW)) === 'true' ||
+        applicant.id.startsWith('case_');
 
-      // Enforce strict sequential order: Step 02 requires Step 01; Step 03 requires Step 01 & 02
-      const d = p && rawD;
-      const f = d && rawF;
+      setIsSubmittedForReview(rawSubmitted);
 
-      if (!p && rawD) {
+      const storedFrontData = sessionStorage.getItem(sKey(STORAGE_KEYS.GOV_DOC_FRONT_DATA));
+      const storedBackData = sessionStorage.getItem(sKey(STORAGE_KEYS.GOV_DOC_BACK_DATA));
+      const storedSelfieData = sessionStorage.getItem(sKey(STORAGE_KEYS.SELFIE_DATA_URL));
+      const storedFramesJson = sessionStorage.getItem(sKey(STORAGE_KEYS.LIVENESS_FRAMES_JSON));
+
+      if (storedFrontData) {
+        setFrontImageDataUrl(storedFrontData);
+        setFrontCompressedBytes(storedFrontData);
+      } else if (applicant.id.startsWith('case_') && applicant.documentSvgOrUrl) {
+        setFrontImageDataUrl(applicant.documentSvgOrUrl);
+        setFrontCompressedBytes(applicant.documentSvgOrUrl);
+      }
+
+      if (storedBackData) {
+        setBackImageDataUrl(storedBackData);
+        setBackCompressedBytes(storedBackData);
+      } else if (applicant.id.startsWith('case_') && applicant.documentBackUrl) {
+        setBackImageDataUrl(applicant.documentBackUrl);
+        setBackCompressedBytes(applicant.documentBackUrl);
+      }
+
+      if (storedSelfieData) {
+        setSelfieImageDataUrl(storedSelfieData);
+      } else if (applicant.id.startsWith('case_') && applicant.selfieUrl) {
+        setSelfieImageDataUrl(applicant.selfieUrl);
+      }
+
+      if (storedFramesJson) {
+        try {
+          setLivenessFrames(JSON.parse(storedFramesJson));
+        } catch {}
+      } else if (applicant.id.startsWith('case_') && applicant.livenessFrames) {
+        setLivenessFrames(applicant.livenessFrames);
+      }
+
+      // Require actual captured camera frames in sessionStorage/state for Step 02 & Step 03 completion
+      const hasRealDocCapture = Boolean(
+        storedFrontData ||
+          frontImageDataUrl ||
+          (applicant.id.startsWith('case_') && applicant.documentSvgOrUrl)
+      );
+      const hasRealSelfieCapture = Boolean(
+        storedSelfieData ||
+          selfieImageDataUrl ||
+          (applicant.id.startsWith('case_') && applicant.selfieUrl)
+      );
+
+      const d = p && rawD && hasRealDocCapture;
+      const f = d && rawF && hasRealSelfieCapture;
+
+      if (!d && rawD) {
         localStorage.removeItem(sKey(STORAGE_KEYS.GOV_DOC_DONE));
       }
-      if (!d && rawF) {
+      if (!f && rawF) {
         localStorage.removeItem(sKey(STORAGE_KEYS.FACE_SCAN_DONE));
       }
 
@@ -748,7 +890,8 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
           storedGender && ['Male', 'Female', 'Other'].includes(storedGender)
             ? storedGender
             : 'Male',
-        documentNumber: storedDocNum !== null ? storedDocNum : '010892746(01)',
+        documentNumber:
+          storedDocNum !== null ? storedDocNum : applicant.documentNumber || '010892746(01)',
         country: 'Cambodia',
         stateProvince: storedState !== null ? storedState : 'Phnom Penh',
         city: storedCity !== null ? storedCity : 'Chamkar Mon',
@@ -767,8 +910,19 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   };
 
   useEffect(() => {
-    setCurrentRoute('/verify');
     reloadStorage();
+    const rawSubmitted =
+      localStorage.getItem(sKey(STORAGE_KEYS.SUBMITTED_FOR_REVIEW)) === 'true' ||
+      applicant.id.startsWith('case_');
+    if (decisionStatus === 'APPROVED') {
+      setCurrentRoute('/home');
+    } else if (decisionStatus === 'REJECTED') {
+      setCurrentRoute('/verify');
+    } else if (rawSubmitted) {
+      setCurrentRoute('/verify');
+    } else {
+      setCurrentRoute('/verify');
+    }
   }, [applicant.id]);
 
   const computedFullName = `${profileData.firstName.trim()} ${profileData.lastName.trim()}`.trim();
@@ -863,6 +1017,8 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
     setDocWarningAlert(null);
     setFrontCompressedBytes(null);
     setBackCompressedBytes(null);
+    setFrontImageDataUrl(null);
+    setBackImageDataUrl(null);
     setCurrentRoute('/take_gov_document');
   };
 
@@ -872,29 +1028,39 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
     setDocWarningAlert(null);
 
     setTorchOn(false);
-    await new Promise((r) => setTimeout(r, 350));
+    await new Promise((r) => setTimeout(r, 250));
 
     const liveFrame = docCameraActive ? captureVideoFrameToDataUrl(docVideoRef.current) : null;
 
+    if (!liveFrame) {
+      setIsCapturingDoc(false);
+      setDocWarningAlert(
+        'Live camera sensor is not active. Please allow camera access in your browser and ensure the video stream is visible before capturing.'
+      );
+      return;
+    }
+
     if (captureSide === 'FRONT') {
-      const resolvedFront =
-        liveFrame || frontImageDataUrl || renderCardSideToPngDataUrl('FRONT');
-      setFrontImageDataUrl(resolvedFront);
-      setFrontCompressedBytes(resolvedFront);
+      setFrontImageDataUrl(liveFrame);
+      setFrontCompressedBytes(liveFrame);
+      try {
+        sessionStorage.setItem(sKey(STORAGE_KEYS.GOV_DOC_FRONT_DATA), liveFrame);
+      } catch {}
       setIsCapturingDoc(false);
       setCaptureSide('BACK');
       showBanner(
-        'Front side scanned',
-        'Now align the back side of your ID in the live camera and tap the camera button',
+        'Front side captured from live camera',
+        'Now hold the BACK side of your ID in front of the live camera and tap the shutter button',
         'warning'
       );
       return;
     }
 
-    const resolvedBack =
-      liveFrame || backImageDataUrl || renderCardSideToPngDataUrl('BACK');
-    setBackImageDataUrl(resolvedBack);
-    setBackCompressedBytes(resolvedBack);
+    setBackImageDataUrl(liveFrame);
+    setBackCompressedBytes(liveFrame);
+    try {
+      sessionStorage.setItem(sKey(STORAGE_KEYS.GOV_DOC_BACK_DATA), liveFrame);
+    } catch {}
     stopDocCamera();
 
     const frontPath = '/data/user/0/kh.neuralkey.wallet/app_flutter/gov_doc_front.jpg';
@@ -910,8 +1076,8 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
 
     popBackToVerify();
     showBanner(
-      'Document Captured',
-      `Front and back of your ${profileData.documentType} verified and saved`,
+      'Document Captured Live',
+      `Front and back of your ${profileData.documentType} captured from live camera`,
       'success'
     );
   };
@@ -941,6 +1107,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
     setFaceDetected(true);
     setLivenessFailedAlert(null);
     setActionScores({ lookLeft: 0, lookRight: 0, smile: 0, blink: 0 });
+    setLivenessFrames({});
     setLivePose({ rawYaw: 0, smilingProb: 0.04, leftEyeOpen: 0.96, rightEyeOpen: 0.96 });
     setCurrentRoute('/scan_verify');
   };
@@ -955,7 +1122,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
     lookLeft: 'Turn Head Left',
     lookRight: 'Turn Head Right',
     smile: 'Smile Naturally',
-    blink: 'Blink Both Eyes',
+    blink: 'Blink',
   };
 
   const actionInstruction: Record<LivenessAction, string> = {
@@ -966,51 +1133,69 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   };
 
   const completeCurrentLivenessChallenge = (scoreOverride?: number) => {
-    if (!faceDetected || awaitingNeutral) return;
+    setLivenessFailedAlert(null);
 
-    const computedScore = scoreOverride !== undefined ? scoreOverride : 0.92;
+    const frameUrl = captureVideoFrameToDataUrl(selfieVideoRef.current);
+    if (!frameUrl) {
+      startSelfieCamera();
+      setLivenessFailedAlert(
+        'Live camera stream is starting. Please ensure camera access is allowed, then tap Capture again.'
+      );
+      return;
+    }
+
+    const defaultScores: Record<LivenessAction, number> = {
+      lookLeft: 0.94,
+      lookRight: 0.95,
+      smile: 0.93,
+      blink: 0.96,
+    };
+    const computedScore =
+      scoreOverride !== undefined ? scoreOverride : defaultScores[currentAction];
     const updatedScores = {
       ...actionScores,
       [currentAction]: Number(computedScore.toFixed(3)),
     };
     setActionScores(updatedScores);
 
+    const updatedFrames = {
+      ...livenessFrames,
+      [currentAction]: frameUrl,
+    };
+    setLivenessFrames(updatedFrames);
+    setSelfieImageDataUrl(frameUrl);
+    try {
+      sessionStorage.setItem(sKey(STORAGE_KEYS.SELFIE_DATA_URL), frameUrl);
+      sessionStorage.setItem(
+        sKey(STORAGE_KEYS.LIVENESS_FRAMES_JSON),
+        JSON.stringify(updatedFrames)
+      );
+    } catch {}
+
     const photoPath = `/data/user/0/kh.neuralkey.wallet/app_flutter/liveness_${currentAction}.jpg`;
     localStorage.setItem(sKey(`liveness_${currentAction}`), photoPath);
 
+    // Advance sequentially: 0 (lookLeft) -> 1 (lookRight) -> 2 (smile) -> 3 (blink) -> Finish
     if (challengeIndex < 3) {
-      setAwaitingNeutral(true);
+      setAwaitingNeutral(false);
+      setChallengeIndex(challengeIndex + 1);
     } else {
-      const frameUrl = captureVideoFrameToDataUrl(selfieVideoRef.current);
-      if (frameUrl) setSelfieImageDataUrl(frameUrl);
       stopSelfieCamera();
       localStorage.setItem(sKey(STORAGE_KEYS.PROFILE_SELFIE_PATH), photoPath);
       const meanScore =
-        (updatedScores.lookLeft +
-          updatedScores.lookRight +
-          updatedScores.smile +
-          updatedScores.blink) /
+        ((updatedScores.lookLeft || 0.94) +
+          (updatedScores.lookRight || 0.95) +
+          (updatedScores.smile || 0.93) +
+          (updatedScores.blink || 0.96)) /
         4;
       localStorage.setItem(sKey(STORAGE_KEYS.LIVENESS_SCORE), meanScore.toFixed(3));
-
-      if (meanScore >= 0.85) {
-        appendAuditLog(
-          'livenessCheckSuccess',
-          `Biometric liveness confirmed (overall score ${(meanScore * 100).toFixed(1)}%)`
-        );
-        handleFinishLivenessWithResult(true, meanScore);
-      } else {
-        appendAuditLog(
-          'livenessCheckFailure',
-          `Liveness score ${(meanScore * 100).toFixed(1)}% did not meet required threshold`
-        );
-        setLivenessFailedAlert(
-          'Liveness score did not meet high-assurance criteria. Please repeat the actions.'
-        );
-        setChallengeIndex(0);
-        setAwaitingNeutral(false);
-        setActionScores({ lookLeft: 0, lookRight: 0, smile: 0, blink: 0 });
-      }
+      appendAuditLog(
+        'livenessCheckSuccess',
+        `Sequential 4-pose biometric liveness confirmed: Left, Right, Smile, Blink (${(
+          meanScore * 100
+        ).toFixed(1)}% confidence)`
+      );
+      handleFinishLivenessWithResult(true, meanScore);
     }
   };
 
@@ -1027,8 +1212,8 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
       setFaceScanDone(true);
       popBackToVerify();
       showBanner(
-        'Liveness Confirmed',
-        `3D live human match confirmed (${((meanScore ?? 0.93) * 100).toFixed(1)}% confidence)`,
+        '4-Step Face Scan Complete',
+        `Left, Right, Smile & Blink captured (${((meanScore ?? 0.95) * 100).toFixed(1)}% confidence)`,
         'success'
       );
     } else {
@@ -1038,31 +1223,6 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
 
   const livenessCancelRef = useRef<boolean>(false);
 
-  const handleInstantOneTapCapture = () => {
-    livenessCancelRef.current = true;
-    const frameUrl = captureVideoFrameToDataUrl(selfieVideoRef.current);
-    if (frameUrl) {
-      setSelfieImageDataUrl(frameUrl);
-    }
-    stopSelfieCamera();
-    const photoPath = `/data/user/0/kh.neuralkey.wallet/app_flutter/liveness_instant.jpg`;
-    localStorage.setItem(sKey(STORAGE_KEYS.PROFILE_SELFIE_PATH), photoPath);
-    localStorage.setItem(sKey(STORAGE_KEYS.LIVENESS_SCORE), '0.965');
-    localStorage.setItem(sKey(STORAGE_KEYS.FACE_SCAN_DONE), 'true');
-    setFaceScanDone(true);
-    setAutoRunningLiveness(false);
-    appendAuditLog(
-      'livenessCheckSuccess',
-      'Immediate biometric liveness confirmed via live camera sensor (96.5% confidence score)'
-    );
-    popBackToVerify();
-    showBanner(
-      'Liveness Confirmed',
-      'Biometric face captured immediately from live camera sensor',
-      'success'
-    );
-  };
-
   const handleAutoCompleteLiveness = async () => {
     if (autoRunningLiveness) return;
     livenessCancelRef.current = false;
@@ -1070,45 +1230,64 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
     setLivenessFailedAlert(null);
     setFaceDetected(true);
 
-    const scoresList = [0.94, 0.95, 0.92, 0.96];
+    const scoresList = [0.94, 0.95, 0.93, 0.96];
     const newScores: Record<LivenessAction, number> = {
       lookLeft: 0,
       lookRight: 0,
       smile: 0,
       blink: 0,
     };
+    const capturedPoses: {
+      lookLeft?: string;
+      lookRight?: string;
+      smile?: string;
+      blink?: string;
+    } = { ...livenessFrames };
 
     for (let i = 0; i < LIVENESS_CHALLENGE_ORDER.length; i++) {
       if (livenessCancelRef.current) return;
       const act = LIVENESS_CHALLENGE_ORDER[i];
       setChallengeIndex(i);
       setAwaitingNeutral(false);
-      await new Promise((r) => setTimeout(r, 2500));
+      await new Promise((r) => setTimeout(r, 1600));
       if (livenessCancelRef.current) return;
+
+      const poseFrame = captureVideoFrameToDataUrl(selfieVideoRef.current);
+      if (!poseFrame) {
+        setAutoRunningLiveness(false);
+        setLivenessFailedAlert(
+          'Live camera is not ready yet. Please allow camera permission and tap Capture for each step.'
+        );
+        return;
+      }
+
+      capturedPoses[act] = poseFrame;
+      setLivenessFrames({ ...capturedPoses });
+      setSelfieImageDataUrl(poseFrame);
+      try {
+        sessionStorage.setItem(sKey(STORAGE_KEYS.SELFIE_DATA_URL), poseFrame);
+        sessionStorage.setItem(
+          sKey(STORAGE_KEYS.LIVENESS_FRAMES_JSON),
+          JSON.stringify(capturedPoses)
+        );
+      } catch {}
 
       newScores[act] = scoresList[i];
       setActionScores({ ...newScores });
 
       const photoPath = `/data/user/0/kh.neuralkey.wallet/app_flutter/liveness_${act}.jpg`;
       localStorage.setItem(sKey(`liveness_${act}`), photoPath);
-
-      if (i < 3) {
-        setAwaitingNeutral(true);
-        await new Promise((r) => setTimeout(r, 800));
-        if (livenessCancelRef.current) return;
-      } else {
-        const frameUrl = captureVideoFrameToDataUrl(selfieVideoRef.current);
-        if (frameUrl) setSelfieImageDataUrl(frameUrl);
+      if (i === 3) {
         localStorage.setItem(sKey(STORAGE_KEYS.PROFILE_SELFIE_PATH), photoPath);
       }
     }
 
     if (livenessCancelRef.current) return;
-    const mean = (0.94 + 0.95 + 0.92 + 0.96) / 4;
+    const mean = (0.94 + 0.95 + 0.93 + 0.96) / 4;
     localStorage.setItem(sKey(STORAGE_KEYS.LIVENESS_SCORE), mean.toFixed(3));
     appendAuditLog(
       'livenessCheckSuccess',
-      `Immediate biometric liveness verified via camera sensor (score ${(mean * 100).toFixed(1)}%)`
+      `Sequential 4-pose liveness verified via live camera sensor (score ${(mean * 100).toFixed(1)}%)`
     );
     setAutoRunningLiveness(false);
     handleFinishLivenessWithResult(true, mean);
@@ -1122,18 +1301,15 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
         stopDocCamera();
       };
     } else if (currentRoute === '/scan_verify') {
+      setChallengeIndex(0);
+      setAwaitingNeutral(false);
+      setLivenessFailedAlert(null);
       startSelfieCamera();
       livenessCancelRef.current = false;
-      const timer = setTimeout(() => {
-        if (!livenessCancelRef.current) {
-          handleAutoCompleteLiveness();
-        }
-      }, 500);
       return () => {
         livenessCancelRef.current = true;
         setAutoRunningLiveness(false);
         stopSelfieCamera();
-        clearTimeout(timer);
       };
     } else {
       stopDocCamera();
@@ -1163,6 +1339,27 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   const handleVerifyIdentity = async () => {
     if (!all3Done || isVerifying) return;
     setPendingError(null);
+
+    const storedFront =
+      frontImageDataUrl || sessionStorage.getItem(sKey(STORAGE_KEYS.GOV_DOC_FRONT_DATA));
+    const storedBack =
+      backImageDataUrl || sessionStorage.getItem(sKey(STORAGE_KEYS.GOV_DOC_BACK_DATA));
+    const storedSelfie =
+      selfieImageDataUrl || sessionStorage.getItem(sKey(STORAGE_KEYS.SELFIE_DATA_URL));
+
+    if (!storedFront) {
+      setGovDocDone(false);
+      localStorage.removeItem(sKey(STORAGE_KEYS.GOV_DOC_DONE));
+      setPendingError('Please capture your ID Document using the live camera in Step 02.');
+      return;
+    }
+
+    if (!storedSelfie) {
+      setFaceScanDone(false);
+      localStorage.removeItem(sKey(STORAGE_KEYS.FACE_SCAN_DONE));
+      setPendingError('Please capture your live face scan using the camera in Step 03.');
+      return;
+    }
 
     if (biometricSessionExpired) {
       const approved = await requestBiometricConfirmation();
@@ -1215,13 +1412,8 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
 
         appendAuditLog(
           'identityVerificationSubmitted',
-          'MockIssuerService: Submitted to Reviewer Console (Current Tier: Level 1, Pending Level 3 Approval)'
+          'MockIssuerService: Submitted to Reviewer Console (Current Tier: Level 1, Pending Level 2 Approval)'
         );
-
-        const resolvedFrontImg = frontImageDataUrl || renderCardSideToPngDataUrl('FRONT');
-        const resolvedBackImg = backImageDataUrl || renderCardSideToPngDataUrl('BACK');
-        const resolvedSelfieImg =
-          selfieImageDataUrl || applicant.selfieUrl || applicant.avatarUrl;
 
         if (onSubmitToReviewer) {
           try {
@@ -1238,9 +1430,10 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                 email: profileData.email,
                 documentExpiry: profileData.documentExpiry,
               },
-              docImageBase64: resolvedFrontImg,
-              docBackImageBase64: resolvedBackImg,
-              selfieImageBase64: resolvedSelfieImg,
+              docImageBase64: storedFront,
+              docBackImageBase64: storedBack || undefined,
+              selfieImageBase64: storedSelfie,
+              livenessFrames,
               livenessScores: {
                 lookLeft: actionScores.lookLeft || 0.94,
                 lookRight: actionScores.lookRight || 0.95,
@@ -1428,26 +1621,21 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
         }
       }
 
-      if (!isLevel3Approved) {
-        localStorage.setItem(sKey(STORAGE_KEYS.TRUST_LEVEL), 'TIER_1_BASIC');
-        setServerTrustLevel('TIER_1_BASIC');
-      }
+      localStorage.setItem(sKey(STORAGE_KEYS.TRUST_LEVEL), 'TIER_1_BASIC');
+      localStorage.setItem(sKey(STORAGE_KEYS.SUBMITTED_FOR_REVIEW), 'true');
+      setServerTrustLevel('TIER_1_BASIC');
+      setIsSubmittedForReview(true);
 
       appendAuditLog(
         'identityVerificationSubmitted',
-        'Identity verification submitted for review. Your photos were automatically deleted after verification.'
+        'Identity verification submitted for review. Wallet locked until reviewer action.'
       );
 
       setVerifyingStep('Updating your verification status...');
       await syncTrustLevelNow();
 
-      const resolvedFrontImg = frontImageDataUrl || renderCardSideToPngDataUrl('FRONT');
-      const resolvedBackImg = backImageDataUrl || renderCardSideToPngDataUrl('BACK');
-      const resolvedSelfieImg =
-        selfieImageDataUrl || applicant.selfieUrl || applicant.avatarUrl;
-
       if (onSubmitToReviewer) {
-        setVerifyingStep('Analyzing ID & Selfie with Google Gemini AI...');
+        setVerifyingStep('Sending submission to Reviewer Console...');
         try {
           await onSubmitToReviewer({
             profileData: {
@@ -1462,9 +1650,10 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
               email: profileData.email,
               documentExpiry: profileData.documentExpiry,
             },
-            docImageBase64: resolvedFrontImg,
-            docBackImageBase64: resolvedBackImg,
-            selfieImageBase64: resolvedSelfieImg,
+            docImageBase64: storedFront,
+            docBackImageBase64: storedBack || undefined,
+            selfieImageBase64: storedSelfie,
+            livenessFrames,
             livenessScores: {
               lookLeft: actionScores.lookLeft || 0.94,
               lookRight: actionScores.lookRight || 0.95,
@@ -1488,8 +1677,8 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
 
       setTimeout(() => {
         setVerificationSuccess(false);
-        setCurrentRoute('/home');
-      }, 1000);
+        setCurrentRoute('/verify');
+      }, 900);
     } catch (err: any) {
       setIsVerifying(false);
       const msg = String(err?.message || '');
@@ -1507,28 +1696,37 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   const handleResetSimulator = () => {
     Object.values(STORAGE_KEYS).forEach((k) => {
       localStorage.removeItem(sKey(k));
+      sessionStorage.removeItem(sKey(k));
     });
+    setFrontImageDataUrl(null);
+    setBackImageDataUrl(null);
+    setSelfieImageDataUrl(null);
+    setLivenessFrames({});
     setUserUpdatedProfile(false);
     setGovDocDone(false);
     setFaceScanDone(false);
+    setIsSubmittedForReview(false);
     setPendingError(null);
     setAuditEvents([]);
     reloadStorage();
     setCurrentRoute('/verify');
   };
 
-  const currentRouteName =
-    currentRoute === '/verify'
-      ? 'Identity Verification'
-      : currentRoute === '/profile'
-      ? 'Personal Profile'
-      : currentRoute === '/take_gov_document'
-      ? 'ID Document Capture'
-      : currentRoute === '/scan_verify'
-      ? 'Face Scan'
-      : currentRoute === '/audit'
-      ? 'Track'
-      : 'Verified Wallet';
+  const currentRouteName = isWalletLocked && currentRoute !== '/audit'
+    ? decisionStatus === 'ESCALATED'
+      ? 'Wallet Locked · Escalated'
+      : 'Wallet Locked · In Review'
+    : currentRoute === '/verify'
+    ? 'Identity Verification'
+    : currentRoute === '/profile'
+    ? 'Personal Profile'
+    : currentRoute === '/take_gov_document'
+    ? 'ID Document Capture'
+    : currentRoute === '/scan_verify'
+    ? 'Face Scan'
+    : currentRoute === '/audit'
+    ? 'Track'
+    : 'Verified Wallet';
 
   return (
     <div className="flex flex-col lg:flex-row gap-5 items-start justify-center max-w-6xl mx-auto py-2">
@@ -1551,7 +1749,11 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
         {/* Mobile Navigation Header */}
         <div className="px-4 py-2.5 bg-slate-950/80 border-b border-slate-800/80 backdrop-blur-md flex items-center justify-between z-20">
           <div className="flex items-center gap-2 min-w-0">
-            {currentRoute !== '/verify' && currentRoute !== '/home' ? (
+            {isWalletLocked && currentRoute !== '/audit' ? (
+              <div className="p-1.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-400 shrink-0">
+                <Lock className="w-3.5 h-3.5" />
+              </div>
+            ) : currentRoute !== '/verify' && currentRoute !== '/home' ? (
               <button
                 type="button"
                 onClick={() => {
@@ -1585,17 +1787,166 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
             </span>
           </div>
 
-          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-950/80 text-cyan-300 border border-blue-500/30 shrink-0">
-            {isLevel3Approved ? 'Verified (Level 3)' : 'Level 1'}
+          <span
+            className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 ${
+              isLevel3Approved
+                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
+                : isWalletLocked
+                ? 'bg-amber-950/80 text-amber-300 border-amber-500/40'
+                : decisionStatus === 'REJECTED'
+                ? 'bg-rose-950/80 text-rose-300 border-rose-500/40'
+                : 'bg-blue-950/80 text-cyan-300 border-blue-500/30'
+            }`}
+          >
+            {isLevel3Approved
+              ? 'Verified (Level 2)'
+              : isWalletLocked
+              ? 'Level 1 · Locked'
+              : 'Level 1'}
           </span>
         </div>
 
         {/* ------------------------------------------------------------- */}
-        {/* ROUTE 1: VerifyScreen (route "/verify")                       */}
+        {/* WALLET LOCK SCREEN (Displayed when submitted & in review/escalated) */}
         {/* ------------------------------------------------------------- */}
-        {currentRoute === '/verify' && (
+        {isWalletLocked && currentRoute !== '/audit' && (
+          <div className="flex-1 p-5 overflow-y-auto flex flex-col justify-between space-y-4 bg-gradient-to-b from-slate-950 via-[#070d19] to-slate-950">
+            <div className="space-y-4 my-auto">
+              {/* Lock Hero Card */}
+              <div className="rounded-3xl p-5 bg-slate-900/90 border border-amber-500/30 text-center space-y-3.5 shadow-xl relative overflow-hidden">
+                <div className="w-16 h-16 rounded-full bg-amber-500/15 border-2 border-amber-400/70 flex items-center justify-center mx-auto shadow-lg shadow-amber-500/10">
+                  <Lock className="w-8 h-8 text-amber-400" />
+                </div>
+
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-bold">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                  <span>
+                    {decisionStatus === 'ESCALATED'
+                      ? 'Escalated · Specialist Review'
+                      : 'Submission in Review'}
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <h2 className="text-base font-bold text-white">
+                    {decisionStatus === 'ESCALATED'
+                      ? 'Wallet Locked for Extended Review'
+                      : 'Wallet Locked During Review'}
+                  </h2>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    {decisionStatus === 'ESCALATED'
+                      ? 'Your identity submission has been escalated to a senior reviewer for secondary verification. Your wallet remains locked until the review is completed.'
+                      : 'Your ID and face scan have been submitted. Your wallet is locked while a reviewer verifies your submission.'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Submitted Summary */}
+              <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2.5 text-xs">
+                <div className="flex items-center justify-between text-slate-400 pb-2 border-b border-slate-800/80">
+                  <span>Applicant</span>
+                  <span className="font-bold text-white">{computedFullName}</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-400 pb-2 border-b border-slate-800/80">
+                  <span>Document</span>
+                  <span className="font-mono text-cyan-300">
+                    {profileData.documentType} ({profileData.documentNumber})
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-400 pb-2 border-b border-slate-800/80">
+                  <span>Current Trust Level</span>
+                  <span className="font-semibold text-amber-300">Level 1 (Pending Level 2)</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-400">
+                  <span>Review Status</span>
+                  <span className="font-semibold text-amber-400">
+                    {decisionStatus === 'ESCALATED'
+                      ? 'Escalated · Locked'
+                      : 'Awaiting Reviewer Action'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Next Steps Guide */}
+              <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 space-y-2 text-[11.5px] text-slate-300">
+                <div className="font-bold text-slate-200 text-xs">
+                  What happens when the reviewer acts:
+                </div>
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>
+                    <strong className="text-emerald-300">Approve:</strong> Unlocks wallet and upgrades trust level from Level 1 to Level 2.
+                  </span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                  <span>
+                    <strong className="text-rose-300">Reject:</strong> Unlocks wallet so you can update and re-submit your ID.
+                  </span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                  <span>
+                    <strong className="text-amber-300">Escalate:</strong> Wallet remains locked while under specialist review.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Track Button on Lock Screen */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuditReturnRoute('/verify');
+                  setCurrentRoute('/audit');
+                }}
+                className="w-full py-3 px-4 rounded-xl bg-slate-900/90 hover:bg-slate-800/90 border border-slate-800 hover:border-cyan-500/40 transition-all flex items-center justify-between gap-2.5 cursor-pointer group shadow-sm"
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-7 h-7 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center shrink-0">
+                    <FileCheck className="w-4 h-4 text-cyan-400" />
+                  </div>
+                  <span className="text-xs font-bold text-slate-200 group-hover:text-cyan-300 transition-colors">
+                    Track
+                  </span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-cyan-300 shrink-0 transition-transform group-hover:translate-x-0.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* ROUTE 1: VerifyScreen (route "/verify" when unlocked)         */}
+        {/* ------------------------------------------------------------- */}
+        {!isWalletLocked && currentRoute === '/verify' && (
           <div className="flex-1 p-4 overflow-y-auto space-y-4 relative flex flex-col justify-between">
             <div className="space-y-4">
+              {/* Rejection Notice Banner when Reviewer Rejects */}
+              {decisionStatus === 'REJECTED' && (
+                <div className="p-3.5 rounded-2xl bg-rose-950/80 border border-rose-500/50 text-xs text-rose-100 space-y-2 shadow-md">
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <span className="font-bold text-white block">
+                        Submission Rejected — Please Re-submit
+                      </span>
+                      <p className="text-[11.5px] text-rose-200/90 leading-relaxed">
+                        Your previous identity verification was declined by the reviewer. Your wallet is now unlocked so you can review or retake your steps below and re-submit.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleResetSimulator}
+                    className="w-full py-1.5 px-3 rounded-xl bg-rose-900/70 hover:bg-rose-800 border border-rose-500/40 text-[11px] font-semibold text-white cursor-pointer flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Clear Steps &amp; Capture Again</span>
+                  </button>
+                </div>
+              )}
               {/* Hero Card */}
               <div
                 className="rounded-2xl p-4 relative overflow-hidden border shadow-lg"
@@ -1891,7 +2242,11 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                 }}
               >
                 <Lock className="w-4 h-4 text-cyan-300" />
-                <span>Verify identity</span>
+                <span>
+                  {decisionStatus === 'REJECTED'
+                    ? 'Re-submit Identity Verification'
+                    : 'Verify identity'}
+                </span>
               </button>
 
               {/* Track Button (No subtitle) */}
@@ -2142,7 +2497,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
         {currentRoute === '/take_gov_document' && (
           <div className="flex-1 flex flex-col justify-between bg-black relative overflow-hidden">
             {/* Top Bar */}
-            <div className="p-3 bg-slate-950/90 border-b border-slate-800 z-20 space-y-2">
+            <div className="p-3 bg-slate-950/90 border-b border-slate-800 z-20">
               {/* Side indicator pills */}
               <div className="flex items-center justify-center gap-2">
                 <button
@@ -2176,31 +2531,6 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                   {backCompressedBytes ? '✓ Back Scanned' : '2. Back Side'}
                 </button>
               </div>
-
-              {/* Instruction banner + Live Camera Only security badge */}
-              <div className="text-center text-[11px] font-bold text-white bg-slate-900/90 py-1.5 px-3 rounded-xl border border-slate-800">
-                {captureSide === 'FRONT'
-                  ? `Align the FRONT of your ${profileData.documentType} in the live camera frame`
-                  : `Now align the BACK of your ${profileData.documentType} in the live camera frame`}
-              </div>
-
-              <div className="flex items-center justify-between gap-2 px-1">
-                <span className="text-[10px] text-amber-400 font-mono font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                  Live Camera Only · Upload Prohibited
-                </span>
-                <button
-                  type="button"
-                  onClick={() => (docCameraActive ? stopDocCamera() : startDocCamera())}
-                  className={`px-2.5 py-0.5 rounded-lg text-[10px] font-semibold border flex items-center gap-1 cursor-pointer transition-colors ${
-                    docCameraActive
-                      ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300'
-                      : 'bg-slate-900 border-slate-700 text-cyan-300 hover:bg-slate-800'
-                  }`}
-                >
-                  <Camera className="w-3 h-3" />
-                  <span>{docCameraActive ? 'Sensor Active' : 'Enable Camera'}</span>
-                </button>
-              </div>
             </div>
 
             {/* Viewfinder displaying Front first, then Back after taking picture */}
@@ -2209,232 +2539,82 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                 <div className="absolute inset-0 bg-amber-300/15 pointer-events-none z-10 animate-pulse" />
               )}
 
-              {docCameraActive ? (
-                <div className="w-full rounded-2xl border-2 border-cyan-400 overflow-hidden relative shadow-2xl bg-slate-950">
-                  <video
-                    ref={docVideoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-52 object-cover"
-                  />
-                  <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/70 text-[10px] font-mono text-emerald-400 border border-emerald-500/40">
-                    ● LIVE CAMERA ({captureSide} SIDE)
+              <div className="w-full rounded-2xl border-2 border-cyan-400 overflow-hidden relative shadow-2xl bg-slate-950">
+                <video
+                  ref={attachDocVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  className={`w-full h-56 object-cover ${docCameraActive ? 'block' : 'hidden'}`}
+                />
+
+                {!docCameraActive && (
+                  <div className="w-full h-56 flex flex-col items-center justify-center p-4 text-center bg-slate-950 relative">
+                    {(captureSide === 'FRONT' ? frontImageDataUrl : backImageDataUrl) ? (
+                      <img
+                        src={(captureSide === 'FRONT' ? frontImageDataUrl : backImageDataUrl) || ''}
+                        alt={`Captured ${captureSide} ID`}
+                        className="w-full h-full object-contain rounded-xl"
+                      />
+                    ) : (
+                      <div className="space-y-2.5 max-w-[230px]">
+                        <div className="w-10 h-10 rounded-full bg-cyan-500/15 border border-cyan-400/40 flex items-center justify-center mx-auto">
+                          <Camera className="w-5 h-5 text-cyan-300" />
+                        </div>
+                        <p className="text-[10.5px] text-slate-400 leading-relaxed">
+                          {docCameraError ||
+                            'Tap the shutter button below to capture your ID document.'}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ) : captureSide === 'FRONT' ? (
-                /* ==================== FRONT SIDE ID CARD ==================== */
-                <div
-                  className={`w-full rounded-2xl border-2 relative overflow-hidden p-4 z-20 shadow-2xl transition-all ${
-                    isCapturingDoc
-                      ? 'border-emerald-400 shadow-emerald-500/30 scale-[0.99]'
-                      : 'border-cyan-400 shadow-cyan-500/20'
-                  }`}
-                  style={{
-                    background:
-                      'linear-gradient(135deg, #0c2238 0%, #081827 55%, #040e17 100%)',
-                  }}
-                >
-                  {/* Security Guilloche Pattern */}
-                  <div className="absolute inset-0 opacity-15 pointer-events-none bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:6px_6px]" />
+                )}
 
-                  {/* Corner Targets */}
-                  <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-cyan-400" />
-                  <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-cyan-400" />
-                  <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-cyan-400" />
-                  <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-cyan-400" />
+                {/* Corner alignment guides */}
+                <div className="absolute top-3 left-3 w-5 h-5 border-t-2 border-l-2 border-cyan-400 pointer-events-none" />
+                <div className="absolute top-3 right-3 w-5 h-5 border-t-2 border-r-2 border-cyan-400 pointer-events-none" />
+                <div className="absolute bottom-3 left-3 w-5 h-5 border-b-2 border-l-2 border-cyan-400 pointer-events-none" />
+                <div className="absolute bottom-3 right-3 w-5 h-5 border-b-2 border-r-2 border-cyan-400 pointer-events-none" />
+              </div>
 
-                  {/* Front Card Header */}
-                  <div className="flex items-center justify-between gap-2 border-b border-cyan-500/30 pb-2 mb-3 relative z-10">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shrink-0">
-                        FRONT SIDE
-                      </span>
-                      <div className="min-w-0">
-                        <div className="text-[10px] font-bold text-white uppercase tracking-wide truncate">
-                          KINGDOM OF CAMBODIA
-                        </div>
-                        <div className="text-[9px] text-cyan-300 font-semibold uppercase tracking-wider truncate">
-                          {profileData.documentType}
-                        </div>
+              {/* Captured Front & Back Thumbnails */}
+              {(frontImageDataUrl || backImageDataUrl) && (
+                <div className="w-full grid grid-cols-2 gap-2 mt-2.5">
+                  <div className="p-1.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center gap-2">
+                    {frontImageDataUrl ? (
+                      <img
+                        src={frontImageDataUrl}
+                        alt="Front ID"
+                        className="w-12 h-8 object-cover rounded border border-emerald-500/40 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-12 h-8 rounded bg-slate-950 border border-slate-800 shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="text-[9.5px] font-bold text-emerald-300 truncate">
+                        Front Side
                       </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="font-mono font-bold text-cyan-300 text-[10px]">
-                        {profileData.documentNumber}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Front Card Body: Photo + Details */}
-                  <div className="grid grid-cols-12 gap-3 items-center relative z-10">
-                    {/* Left: Portrait & Smart Chip */}
-                    <div className="col-span-4 flex flex-col items-center gap-1.5">
-                      <div className="w-20 h-24 rounded-lg overflow-hidden border border-cyan-400/60 shadow-md relative bg-slate-900">
-                        <img
-                          src={applicant.avatarUrl}
-                          alt={computedFullName}
-                          className="w-full h-full object-cover"
-                        />
-                        {/* Contact Smart Chip */}
-                        <div className="absolute bottom-1 left-1 w-4 h-3 rounded-xs bg-gradient-to-br from-amber-200 via-amber-400 to-amber-600 border border-amber-200/80 shadow-xs" />
-                      </div>
-                      <span className="text-[8px] font-mono text-cyan-300/80 uppercase tracking-widest">
-                        ICAO BIOMETRIC
-                      </span>
-                    </div>
-
-                    {/* Right: Printed Fields */}
-                    <div className="col-span-8 space-y-1.5 text-[10.5px] min-w-0">
-                      <div>
-                        <span className="text-[8px] uppercase text-slate-400 block font-mono">
-                          FULL NAME / គោត្តនាម និងនាម
-                        </span>
-                        <div className="font-bold text-white truncate text-xs">
-                          {computedFullName || 'Applicant'}
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <div>
-                          <span className="text-[8px] uppercase text-slate-400 block font-mono">
-                            DATE OF BIRTH
-                          </span>
-                          <div className="font-mono text-slate-200 font-semibold truncate">
-                            {profileData.dateOfBirth}
-                          </div>
-                        </div>
-                        <div>
-                          <span className="text-[8px] uppercase text-slate-400 block font-mono">
-                            SEX / NAT
-                          </span>
-                          <div className="font-mono text-amber-300 font-semibold truncate">
-                            {(profileData.gender || 'Male').charAt(0)} / KHM
-                          </div>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <div>
-                          <span className="text-[8px] uppercase text-slate-400 block font-mono">
-                            DOCUMENT NO.
-                          </span>
-                          <div className="font-mono text-cyan-300 font-bold truncate">
-                            {profileData.documentNumber}
-                          </div>
-                        </div>
-                        <div>
-                          <span className="text-[8px] uppercase text-slate-400 block font-mono">
-                            EXPIRY DATE
-                          </span>
-                          <div className="font-mono text-slate-200 truncate">
-                            {profileData.documentExpiry}
-                          </div>
-                        </div>
+                      <div className="text-[8.5px] text-slate-400 font-mono">
+                        {frontImageDataUrl ? 'Captured' : 'Pending'}
                       </div>
                     </div>
                   </div>
-                </div>
-              ) : (
-                /* ==================== BACK SIDE ID CARD ==================== */
-                <div
-                  className={`w-full rounded-2xl border-2 relative overflow-hidden p-4 z-20 shadow-2xl transition-all ${
-                    isCapturingDoc
-                      ? 'border-emerald-400 shadow-emerald-500/30 scale-[0.99]'
-                      : 'border-cyan-400 shadow-cyan-500/20'
-                  }`}
-                  style={{
-                    background:
-                      'linear-gradient(135deg, #091b2e 0%, #071320 55%, #030b12 100%)',
-                  }}
-                >
-                  {/* Security Guilloche Pattern */}
-                  <div className="absolute inset-0 opacity-15 pointer-events-none bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:6px_6px]" />
-
-                  {/* Corner Targets */}
-                  <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-cyan-400" />
-                  <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-cyan-400" />
-                  <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-cyan-400" />
-                  <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-cyan-400" />
-
-                  {/* Back Card Header */}
-                  <div className="flex items-center justify-between gap-2 border-b border-cyan-500/30 pb-2 mb-3 relative z-10">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shrink-0">
-                        BACK SIDE
-                      </span>
-                      <div className="min-w-0">
-                        <div className="text-[10px] font-bold text-white uppercase tracking-wide truncate">
-                          OFFICIAL REGISTRY &amp; MRZ
-                        </div>
-                        <div className="text-[9px] text-slate-400 truncate">
-                          Ministry of Interior · {profileData.stateProvince || 'Phnom Penh'}, Cambodia
-                        </div>
+                  <div className="p-1.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center gap-2">
+                    {backImageDataUrl ? (
+                      <img
+                        src={backImageDataUrl}
+                        alt="Back ID"
+                        className="w-12 h-8 object-cover rounded border border-emerald-500/40 shrink-0"
+                      />
+                    ) : (
+                      <div className="w-12 h-8 rounded bg-slate-950 border border-slate-800 shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="text-[9.5px] font-bold text-emerald-300 truncate">
+                        Back Side
                       </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <span className="text-[9px] font-mono text-cyan-300 font-semibold">
-                        ICAO 9303
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Back Card Body: Barcode/Address + MRZ Strip */}
-                  <div className="space-y-2.5 relative z-10">
-                    <div className="flex items-center justify-between gap-2 bg-slate-950/60 border border-slate-800 rounded-lg px-3 py-2 text-[10px]">
-                      <div className="space-y-0.5 min-w-0">
-                        <div className="text-slate-400 text-[8px] uppercase font-mono">
-                          PLACE OF ADDRESS / ទីលំនៅ
-                        </div>
-                        <div className="text-slate-200 font-semibold truncate">
-                          {profileData.city ? `${profileData.city}, ` : ''}
-                          {profileData.stateProvince || 'Phnom Penh'}, Cambodia
-                        </div>
-                      </div>
-                      {/* Synthetic 2D Barcode Visual */}
-                      <div className="shrink-0 flex items-center gap-0.5 px-2 py-1 bg-white rounded-xs">
-                        {[2, 1, 3, 1, 2, 1, 2, 3, 1, 2, 1, 2].map((w, idx) => (
-                          <div
-                            key={idx}
-                            className="h-5 bg-slate-950"
-                            style={{ width: `${w}px` }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-[9.5px] bg-slate-950/40 border border-slate-800/80 rounded-lg px-3 py-1.5">
-                      <div>
-                        <span className="text-[7.5px] uppercase text-slate-400 block font-mono">
-                          ISSUING AUTHORITY
-                        </span>
-                        <span className="text-slate-200 font-medium">
-                          General Dept. of Identification
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-[7.5px] uppercase text-slate-400 block font-mono">
-                          ISSUED DATE
-                        </span>
-                        <span className="font-mono text-slate-200">
-                          2021-06-15
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* 2-Line Machine Readable Zone (MRZ) */}
-                    <div className="font-mono text-[9.5px] tracking-wider leading-relaxed p-2.5 rounded-lg bg-black/90 text-emerald-400 border border-slate-800 overflow-hidden">
-                      <div className="truncate">
-                        {`IDKHM${profileData.documentNumber
-                          .replace(/[^A-Z0-9]/gi, '')
-                          .toUpperCase()
-                          .padEnd(9, '<')
-                          .slice(0, 9)}<<<<<<<<<<<<<<`}
-                      </div>
-                      <div className="truncate">
-                        {`${profileData.dateOfBirth.replace(/-/g, '').slice(2)}8${(
-                          profileData.gender || 'M'
-                        ).charAt(0)}${profileData.documentExpiry
-                          .replace(/-/g, '')
-                          .slice(2)}4KHM<<<<<<<<<<<06`}
+                      <div className="text-[8.5px] text-slate-400 font-mono">
+                        {backImageDataUrl ? 'Captured' : 'Pending'}
                       </div>
                     </div>
                   </div>
@@ -2488,7 +2668,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
         )}
 
         {/* ------------------------------------------------------------- */}
-        {/* ROUTE 4: Step 3 Active Biometric Liveness (Live Camera Only)  */}
+        {/* ROUTE 4: Step 3 Active Biometric Liveness                     */}
         {/* ------------------------------------------------------------- */}
         {currentRoute === '/scan_verify' && (
           <div className="flex-1 flex flex-col justify-between bg-slate-950 relative overflow-hidden">
@@ -2502,19 +2682,14 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
             {/* Top HUD */}
             <div className="p-3.5 bg-slate-950/90 border-b border-slate-800 z-20 space-y-2">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-bold text-cyan-300">
-                    Face Verification
-                  </span>
-                  <span className="text-[9.5px] text-amber-400 font-mono font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
-                    Upload Prohibited
-                  </span>
-                </div>
+                <span className="text-xs font-bold text-cyan-300">
+                  Face Verification
+                </span>
 
                 <button
                   type="button"
                   onClick={() => setScreenFillLight(!screenFillLight)}
-                  className={`px-2.5 py-1 rounded-full border text-[10px] font-medium flex items-center gap-1 cursor-pointer ${
+                  className={`px-2 py-1 rounded-full border text-[10px] font-medium flex items-center gap-1 cursor-pointer ${
                     screenFillLight
                       ? 'bg-white text-slate-950 border-white font-bold'
                       : 'bg-slate-900 text-slate-300 border-slate-700'
@@ -2522,158 +2697,100 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                   title="Screen fill light"
                 >
                   <Sun className="w-3 h-3" />
-                  <span>Fill Light</span>
                 </button>
               </div>
 
-              {/* Progress Bar (index / 4) */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-[10.5px]">
-                  <span className="text-slate-300 font-medium">
-                    {actionFriendlyTitle[currentAction]}
-                  </span>
-                  <span className="text-[#69F0AE] font-bold">
-                    Step {challengeIndex + 1} of 4
-                  </span>
-                </div>
-                <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-cyan-400 to-[#69F0AE] transition-all duration-300"
-                    style={{
-                      width: `${
-                        (Object.values(actionScores).filter((s) => s > 0).length / 4) * 100
-                      }%`,
-                    }}
-                  />
-                </div>
+              <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-cyan-400 to-[#69F0AE] transition-all duration-300"
+                  style={{
+                    width: `${
+                      (Object.values(livenessFrames).filter(Boolean).length / 4) * 100
+                    }%`,
+                  }}
+                />
               </div>
             </div>
 
             {/* Center Biometric Viewfinder */}
-            <div className="flex-1 p-3.5 overflow-y-auto space-y-3 flex flex-col items-center justify-between z-20">
-              <div className="w-full flex items-center justify-center">
-                <div
-                  className={`px-3 py-1 rounded-full text-[10.5px] font-semibold border flex items-center gap-1.5 ${
-                    faceDetected
-                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
-                      : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                  }`}
-                >
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      faceDetected ? 'bg-emerald-400' : 'bg-rose-400'
-                    }`}
-                  />
-                  <span>{faceDetected ? 'Live Camera Sensor Active' : 'Position Face in Center'}</span>
+            <div className="flex-1 p-4 overflow-y-auto flex flex-col items-center justify-between z-20">
+              <div className="w-full flex items-center justify-center pt-1">
+                <div className="px-3.5 py-1.5 rounded-full text-xs font-bold border bg-cyan-500/15 text-cyan-200 border-cyan-400/50 flex items-center gap-2 shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                  <span>
+                    Step {challengeIndex + 1}: {actionFriendlyTitle[currentAction]}
+                  </span>
                 </div>
               </div>
 
-              {/* Circular Guide Ring / Bracket Frame with Real Webcam Video */}
-              <div className="relative w-48 h-48 flex items-center justify-center my-1">
-                {currentAction === 'lookLeft' || currentAction === 'lookRight' ? (
-                  <div className="w-44 h-44 rounded-full border-4 border-dashed border-cyan-400 flex items-center justify-center relative shadow-[0_0_25px_rgba(56,189,248,0.25)] overflow-hidden">
-                    {selfieCameraActive ? (
-                      <video
-                        ref={selfieVideoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        className="w-38 h-38 rounded-full object-cover scale-x-[-1]"
-                      />
-                    ) : (
-                      <img
-                        src={selfieImageDataUrl || applicant.avatarUrl}
-                        alt="Front Camera"
-                        className="w-38 h-38 rounded-full object-cover opacity-85"
-                      />
+              <div className="flex-1 flex items-center justify-center">
+                {/* Persistent Single Video Element across all 4 challenges (Always Circular) */}
+                <div className="relative w-52 h-52 flex items-center justify-center">
+                  <div
+                    className={`w-48 h-48 rounded-full flex items-center justify-center relative overflow-hidden bg-slate-950 transition-all ${
+                      currentAction === 'lookLeft' || currentAction === 'lookRight'
+                        ? 'border-4 border-dashed border-cyan-400 shadow-[0_0_25px_rgba(56,189,248,0.25)]'
+                        : 'border-4 border-dashed border-[#69F0AE] shadow-[0_0_25px_rgba(105,240,174,0.25)]'
+                    }`}
+                  >
+                    <video
+                      ref={attachSelfieVideoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className={`w-full h-full object-cover scale-x-[-1] ${
+                        selfieCameraActive ? 'block' : 'hidden'
+                      }`}
+                    />
+
+                    {!selfieCameraActive && (
+                      <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center">
+                        {selfieImageDataUrl ? (
+                          <img
+                            src={selfieImageDataUrl}
+                            alt="Captured Face"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <>
+                            <Camera className="w-6 h-6 text-cyan-400 mb-1.5" />
+                            <span className="text-[9.5px] text-slate-400 mt-0.5 leading-tight">
+                              {selfieCameraError || 'Tap Capture below'}
+                            </span>
+                          </>
+                        )}
+                      </div>
                     )}
-                    <div className="absolute bottom-1 bg-slate-950/90 px-2.5 py-0.5 rounded-full border border-cyan-400 text-[9.5px] text-cyan-300 font-semibold">
-                      {actionInstruction[currentAction]}
-                    </div>
                   </div>
-                ) : (
-                  <div className="w-44 h-44 relative flex items-center justify-center p-3">
-                    <div className="w-4 h-4 border-t-4 border-l-4 border-[#69F0AE] absolute top-0 left-0 animate-pulse" />
-                    <div className="w-4 h-4 border-t-4 border-r-4 border-[#69F0AE] absolute top-0 right-0 animate-pulse" />
-                    <div className="w-4 h-4 border-b-4 border-l-4 border-[#69F0AE] absolute bottom-0 left-0 animate-pulse" />
-                    <div className="w-4 h-4 border-b-4 border-r-4 border-[#69F0AE] absolute bottom-0 right-0 animate-pulse" />
-                    {selfieCameraActive ? (
-                      <video
-                        ref={selfieVideoRef}
-                        autoPlay
-                        playsInline
-                        muted
-                        className="w-36 h-36 rounded-2xl object-cover scale-x-[-1]"
-                      />
-                    ) : (
-                      <img
-                        src={selfieImageDataUrl || applicant.avatarUrl}
-                        alt="Front Camera"
-                        className="w-36 h-36 rounded-2xl object-cover opacity-85"
-                      />
-                    )}
-                    <div className="absolute -bottom-2 bg-slate-950 px-2.5 py-0.5 rounded-full border border-[#69F0AE] text-[10px] text-[#69F0AE] font-semibold">
-                      {actionInstruction[currentAction]}
+                </div>
+              </div>
+
+              <div className="w-full space-y-2.5">
+                <button
+                  type="button"
+                  onClick={() => completeCurrentLivenessChallenge()}
+                  className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-cyan-600 via-blue-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white font-bold text-xs cursor-pointer flex items-center justify-center gap-1.5 shadow-lg transition-all"
+                >
+                  <Camera className="w-3.5 h-3.5 text-white shrink-0" />
+                  <span>Capture</span>
+                </button>
+
+                {livenessFailedAlert && (
+                  <div className="w-full p-2.5 rounded-xl bg-rose-950/90 border border-rose-500/50 text-xs text-rose-200 flex items-start justify-between gap-2">
+                    <div>
+                      <span className="font-bold text-white block">Verification Notice</span>
+                      <span>{livenessFailedAlert}</span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => setLivenessFailedAlert(null)}
+                      className="text-rose-300 hover:text-white cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
                 )}
               </div>
-
-              {/* Action Prompt or Return to Neutral */}
-              {awaitingNeutral ? (
-                <div className="w-full p-3 rounded-xl bg-amber-950/80 border border-amber-400/50 text-center space-y-1.5">
-                  <div className="text-xs font-bold text-amber-300">
-                    Return to neutral position
-                  </div>
-                  <div className="text-[11px] text-slate-300">
-                    Look straight ahead into the camera to continue
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleReturnToNeutral}
-                    className="w-full py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs cursor-pointer"
-                  >
-                    Next Step &rarr;
-                  </button>
-                </div>
-              ) : (
-                <div className="w-full p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-white flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                      <span>{actionFriendlyTitle[currentAction]}</span>
-                    </span>
-                    <span className="text-[11px] text-cyan-300 font-mono font-bold">
-                      {challengeIndex + 1} / 4
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleInstantOneTapCapture}
-                    className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-cyan-600 via-blue-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white font-bold text-xs cursor-pointer flex items-center justify-center gap-1.5 shadow-lg transition-all"
-                  >
-                    <Camera className="w-3.5 h-3.5 text-white shrink-0" />
-                    <span>Capture Live Camera Now</span>
-                  </button>
-                </div>
-              )}
-
-              {livenessFailedAlert && (
-                <div className="w-full p-2.5 rounded-xl bg-rose-950/90 border border-rose-500/50 text-xs text-rose-200 flex items-start justify-between gap-2">
-                  <div>
-                    <span className="font-bold text-white block">Verification Notice</span>
-                    <span>{livenessFailedAlert}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setLivenessFailedAlert(null)}
-                    className="text-rose-300 hover:text-white cursor-pointer"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -2698,7 +2815,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                 }`}
               >
                 <ShieldCheck className="w-3.5 h-3.5" />
-                <span>{isLevel3Approved ? 'Level 3' : 'Level 1'}</span>
+                <span>{isLevel3Approved ? 'Level 2' : 'Level 1'}</span>
               </span>
             </div>
 
@@ -2706,7 +2823,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
               <div className="flex justify-between items-center">
                 <span className="text-xs font-bold text-cyan-300">
                   {isLevel3Approved
-                    ? 'Identity Assurance Level 3'
+                    ? 'Identity Assurance Level 2 (IAL2)'
                     : 'Verification Submitted'}
                 </span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
@@ -2731,8 +2848,8 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>
                   {isLevel3Approved
-                    ? 'Approved in Reviewer Console. Upgraded to Level 3.'
-                    : 'Submitted for review. Approve in Reviewer Console to upgrade to Level 3.'}
+                    ? 'Approved in Reviewer Console. Upgraded from Level 1 to Level 2.'
+                    : 'Submitted for review. Approve in Reviewer Console to upgrade from Level 1 to Level 2.'}
                 </span>
               </div>
             </div>
@@ -2818,7 +2935,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                       isLevel3Approved ? 'text-emerald-400' : 'text-amber-300'
                     }`}
                   >
-                    {isLevel3Approved ? 'Level 3 Verified' : 'Level 1 (Pending Review)'}
+                    {isLevel3Approved ? 'Level 2 Verified' : 'Level 1 (Pending Review)'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center gap-2 pt-1">
@@ -3021,7 +3138,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
             </div>
             <h3 className="text-base font-bold text-white">Identity submitted for review.</h3>
             <p className="text-xs text-slate-300">
-              Approve the ID in Reviewer Console to upgrade to Level 3.
+              Approve the ID in Reviewer Console to upgrade from Level 1 to Level 2.
             </p>
           </div>
         )}

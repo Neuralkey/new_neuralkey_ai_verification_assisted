@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Smartphone,
   ShieldCheck,
@@ -55,7 +55,9 @@ interface ApplicantWalletProps {
       documentExpiry: string;
     };
     docImageBase64: string;
+    docBackImageBase64?: string;
     selfieImageBase64: string;
+    livenessFrames?: Partial<Record<'lookLeft' | 'lookRight' | 'smile' | 'blink', string>>;
     livenessScores: {
       lookLeft: number;
       lookRight: number;
@@ -106,6 +108,7 @@ export const ApplicantWallet: React.FC<ApplicantWalletProps> = ({
   const isLevel3Approved =
     decisionStatus === 'APPROVED' ||
     issuedCredential !== null ||
+    applicant.trustLevel === 'TIER_2_IAL2_VERIFIED' ||
     applicant.trustLevel === 'TIER_3_IAL3_VERIFIED';
 
   // View mode switcher: Identity Verify prototype
@@ -226,42 +229,120 @@ export const ApplicantWallet: React.FC<ApplicantWalletProps> = ({
 
   const [isCapturingLiveDoc, setIsCapturingLiveDoc] = useState(false);
   const [isCapturingLiveSelfie, setIsCapturingLiveSelfie] = useState(false);
+  const docVideoRef = useRef<HTMLVideoElement | null>(null);
+  const selfieVideoRef = useRef<HTMLVideoElement | null>(null);
+  const docStreamRef = useRef<MediaStream | null>(null);
+  const selfieStreamRef = useRef<MediaStream | null>(null);
 
-  // Immediate live camera capture for ID document (file upload prohibited)
-  const handleImmediateLiveDocCapture = () => {
-    setIsCapturingLiveDoc(true);
-    setTimeout(() => {
-      setDocImagePreview(
-        createSyntheticCardSvg(
-          customNation || 'KHM',
-          customNation === 'SGP'
-            ? 'Republic of Singapore'
-            : customNation === 'MYS'
-            ? 'Malaysia'
-            : customNation === 'THA'
-            ? 'Kingdom of Thailand'
-            : customNation === 'IDN'
-            ? 'Republik Indonesia'
-            : 'Kingdom of Cambodia',
-          customDocType || 'National Identity Card',
-          customName.split('(')[0].trim() || 'Sok Chandara',
-          customDocNum || '010892746',
-          customDob || '1995-09-12',
-          applicant.avatarUrl,
-          (customNation || 'KH').slice(0, 2)
-        )
-      );
-      setIsCapturingLiveDoc(false);
-    }, 450);
+  const stopDocStream = useCallback(() => {
+    if (docStreamRef.current) {
+      docStreamRef.current.getTracks().forEach((t) => t.stop());
+      docStreamRef.current = null;
+    }
+    setIsCapturingLiveDoc(false);
+  }, []);
+
+  const stopSelfieStream = useCallback(() => {
+    if (selfieStreamRef.current) {
+      selfieStreamRef.current.getTracks().forEach((t) => t.stop());
+      selfieStreamRef.current = null;
+    }
+    setIsCapturingLiveSelfie(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      stopDocStream();
+      stopSelfieStream();
+    };
+  }, [stopDocStream, stopSelfieStream]);
+
+  const attachDocVideo = useCallback((el: HTMLVideoElement | null) => {
+    docVideoRef.current = el;
+    if (el && docStreamRef.current && el.srcObject !== docStreamRef.current) {
+      el.srcObject = docStreamRef.current;
+      el.play().catch(() => {});
+    }
+  }, []);
+
+  const attachSelfieVideo = useCallback((el: HTMLVideoElement | null) => {
+    selfieVideoRef.current = el;
+    if (el && selfieStreamRef.current && el.srcObject !== selfieStreamRef.current) {
+      el.srcObject = selfieStreamRef.current;
+      el.play().catch(() => {});
+    }
+  }, []);
+
+  // Real live camera capture for ID document (file upload prohibited)
+  const handleImmediateLiveDocCapture = async () => {
+    setFormError(null);
+    if (!isCapturingLiveDoc) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 420 } },
+          audio: false,
+        });
+        docStreamRef.current = stream;
+        setIsCapturingLiveDoc(true);
+        if (docVideoRef.current) {
+          docVideoRef.current.srcObject = stream;
+          await docVideoRef.current.play().catch(() => {});
+        }
+      } catch {
+        setFormError('Camera permission denied or unavailable. Please allow camera access in your browser.');
+      }
+      return;
+    }
+
+    const vid = docVideoRef.current;
+    if (vid && vid.videoWidth > 0 && vid.videoHeight > 0) {
+      const canvas = document.createElement('canvas');
+      canvas.width = vid.videoWidth;
+      canvas.height = vid.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
+        setDocImagePreview(canvas.toDataURL('image/jpeg', 0.88));
+        stopDocStream();
+      }
+    }
   };
 
-  // Immediate live camera capture for biometric liveness (file upload prohibited)
-  const handleImmediateLiveSelfieCapture = () => {
-    setIsCapturingLiveSelfie(true);
-    setTimeout(() => {
-      setSelfieImagePreview(applicant.selfieUrl || applicant.avatarUrl);
-      setIsCapturingLiveSelfie(false);
-    }, 450);
+  // Real live camera capture for biometric liveness (file upload prohibited)
+  const handleImmediateLiveSelfieCapture = async () => {
+    setFormError(null);
+    if (!isCapturingLiveSelfie) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 480 } },
+          audio: false,
+        });
+        selfieStreamRef.current = stream;
+        setIsCapturingLiveSelfie(true);
+        if (selfieVideoRef.current) {
+          selfieVideoRef.current.srcObject = stream;
+          await selfieVideoRef.current.play().catch(() => {});
+        }
+      } catch {
+        setFormError('Camera permission denied or unavailable. Please allow camera access in your browser.');
+      }
+      return;
+    }
+
+    const vid = selfieVideoRef.current;
+    if (vid && vid.videoWidth > 0 && vid.videoHeight > 0) {
+      const canvas = document.createElement('canvas');
+      canvas.width = vid.videoWidth;
+      canvas.height = vid.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.translate(canvas.width, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
+        setSelfieImagePreview(canvas.toDataURL('image/jpeg', 0.88));
+        stopSelfieStream();
+      }
+    }
   };
 
   // Submit with live progress strip (UI-07)
@@ -269,6 +350,10 @@ export const ApplicantWallet: React.FC<ApplicantWalletProps> = ({
     e.preventDefault();
     if (!docImagePreview) {
       setFormError('Please capture an ID document image using the live camera.');
+      return;
+    }
+    if (!selfieImagePreview) {
+      setFormError('Please capture your live biometric face scan using the live camera.');
       return;
     }
     setFormError(null);
@@ -302,7 +387,7 @@ export const ApplicantWallet: React.FC<ApplicantWalletProps> = ({
         nationality: customNation,
         documentType: customDocType,
         docImageBase64: docImagePreview,
-        selfieImageBase64: selfieImagePreview || applicant.selfieUrl,
+        selfieImageBase64: selfieImagePreview,
       });
       setTimeout(() => {
         setSubmissionSuccess(null);
@@ -415,15 +500,15 @@ export const ApplicantWallet: React.FC<ApplicantWalletProps> = ({
               {activeTab === 'credentials' && (
                 <div className="space-y-3 min-w-0">
                   {isLevel3Approved ? (
-                    /* The Credential Card (Upgraded to Level 3 after approval) */
+                    /* The Credential Card (Upgraded from Level 1 to Level 2 after approval) */
                     <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-blue-950 border border-blue-500/40 rounded-2xl p-3.5 sm:p-4 shadow-lg space-y-3 relative overflow-hidden min-w-0">
                       <div className="flex flex-wrap items-center justify-between gap-1.5 min-w-0">
                         <div className="flex items-center gap-1.5 min-w-0">
                           <Award className="w-4 h-4 text-cyan-400 shrink-0" />
-                          <span className="font-bold text-white text-xs truncate">Level 3 Identity Credential</span>
+                          <span className="font-bold text-white text-xs truncate">Level 2 Identity Credential</span>
                         </div>
                         <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 shrink-0">
-                          LEVEL 3 (IAL3)
+                          LEVEL 2 (IAL2)
                         </span>
                       </div>
 
@@ -438,7 +523,7 @@ export const ApplicantWallet: React.FC<ApplicantWalletProps> = ({
                         </div>
                         <div className="flex justify-between gap-2 min-w-0">
                           <span className="text-slate-400 shrink-0">Assurance Tier:</span>
-                          <span className="text-emerald-400 font-bold truncate">Level 3 (Upgraded)</span>
+                          <span className="text-emerald-400 font-bold truncate">Level 2 (Upgraded from Level 1)</span>
                         </div>
                         <div className="flex justify-between gap-2 min-w-0">
                           <span className="text-slate-400 shrink-0">Issuer:</span>
@@ -475,7 +560,7 @@ export const ApplicantWallet: React.FC<ApplicantWalletProps> = ({
                         Level 1 Basic Identity
                       </div>
                       <p className="text-xs text-slate-400 leading-relaxed">
-                        Submit your ID and approve it in the Reviewer Console to upgrade to Level 3.
+                        Submit your ID and approve it in the Reviewer Console to upgrade from Level 1 to Level 2.
                       </p>
                       <button
                         type="button"
@@ -613,9 +698,32 @@ export const ApplicantWallet: React.FC<ApplicantWalletProps> = ({
                     </span>
                   </div>
                   <div className="border border-slate-700 rounded-xl p-2.5 text-center bg-slate-950">
-                    {docImagePreview ? (
+                    {isCapturingLiveDoc ? (
+                      <div className="space-y-2">
+                        <div className="h-28 rounded-lg overflow-hidden bg-black border border-cyan-400 relative">
+                          <video
+                            ref={attachDocVideo}
+                            autoPlay
+                            playsInline
+                            muted
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-black/75 text-[9px] font-mono text-emerald-400">
+                            ● LIVE CAMERA
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleImmediateLiveDocCapture}
+                          className="w-full py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <Camera className="w-3.5 h-3.5" />
+                          <span>Snap ID Frame Now</span>
+                        </button>
+                      </div>
+                    ) : docImagePreview ? (
                       <div className="space-y-1.5">
-                        <div className="h-16 rounded overflow-hidden bg-slate-900 border border-slate-800 relative">
+                        <div className="h-20 rounded overflow-hidden bg-slate-900 border border-slate-800 relative">
                           <img
                             src={docImagePreview}
                             alt="Document"
@@ -630,11 +738,10 @@ export const ApplicantWallet: React.FC<ApplicantWalletProps> = ({
                         <button
                           type="button"
                           onClick={handleImmediateLiveDocCapture}
-                          disabled={isCapturingLiveDoc}
                           className="px-2.5 py-0.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] text-cyan-300 font-semibold cursor-pointer transition-all flex items-center justify-center gap-1 mx-auto"
                         >
                           <Camera className="w-3 h-3" />
-                          <span>{isCapturingLiveDoc ? 'Scanning...' : 'Rescan Live ID'}</span>
+                          <span>Rescan Live ID</span>
                         </button>
                       </div>
                     ) : (
@@ -642,11 +749,10 @@ export const ApplicantWallet: React.FC<ApplicantWalletProps> = ({
                         <button
                           type="button"
                           onClick={handleImmediateLiveDocCapture}
-                          disabled={isCapturingLiveDoc}
                           className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs cursor-pointer flex items-center justify-center gap-1.5 shadow-md transition-all"
                         >
                           <Camera className="w-4 h-4 text-cyan-200" />
-                          <span>{isCapturingLiveDoc ? 'Scanning ID Sensor...' : 'Scan ID via Live Camera'}</span>
+                          <span>Open Live Camera for ID</span>
                         </button>
                         <p className="text-[10px] text-slate-400 leading-tight">
                           Live camera capture only. File uploads are disabled to prevent spoofing.
@@ -666,9 +772,29 @@ export const ApplicantWallet: React.FC<ApplicantWalletProps> = ({
                     </span>
                   </div>
                   <div className="border border-slate-700 rounded-xl p-2.5 text-center bg-slate-950">
-                    {selfieImagePreview ? (
+                    {isCapturingLiveSelfie ? (
+                      <div className="space-y-2">
+                        <div className="h-28 w-28 mx-auto rounded-full overflow-hidden bg-black border-2 border-cyan-400 relative">
+                          <video
+                            ref={attachSelfieVideo}
+                            autoPlay
+                            playsInline
+                            muted
+                            className="w-full h-full object-cover scale-x-[-1]"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleImmediateLiveSelfieCapture}
+                          className="w-full py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs cursor-pointer flex items-center justify-center gap-1.5"
+                        >
+                          <Camera className="w-3.5 h-3.5" />
+                          <span>Snap Live Face Frame</span>
+                        </button>
+                      </div>
+                    ) : selfieImagePreview ? (
                       <div className="space-y-1.5">
-                        <div className="h-16 rounded overflow-hidden bg-slate-900 border border-slate-800 relative mx-auto w-20">
+                        <div className="h-20 rounded overflow-hidden bg-slate-900 border border-slate-800 relative mx-auto w-24">
                           <img
                             src={selfieImagePreview}
                             alt="Live Selfie"
@@ -683,11 +809,10 @@ export const ApplicantWallet: React.FC<ApplicantWalletProps> = ({
                         <button
                           type="button"
                           onClick={handleImmediateLiveSelfieCapture}
-                          disabled={isCapturingLiveSelfie}
                           className="px-2.5 py-0.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] text-cyan-300 font-semibold cursor-pointer transition-all flex items-center justify-center gap-1 mx-auto"
                         >
                           <Camera className="w-3 h-3" />
-                          <span>{isCapturingLiveSelfie ? 'Capturing...' : 'Retake Live Selfie'}</span>
+                          <span>Retake Live Selfie</span>
                         </button>
                       </div>
                     ) : (
@@ -695,11 +820,10 @@ export const ApplicantWallet: React.FC<ApplicantWalletProps> = ({
                         <button
                           type="button"
                           onClick={handleImmediateLiveSelfieCapture}
-                          disabled={isCapturingLiveSelfie}
                           className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs cursor-pointer flex items-center justify-center gap-1.5 shadow-md transition-all"
                         >
                           <Camera className="w-4 h-4 text-cyan-200" />
-                          <span>{isCapturingLiveSelfie ? 'Capturing Face Sensor...' : 'Capture Live Selfie Immediately'}</span>
+                          <span>Open Live Face Camera</span>
                         </button>
                         <p className="text-[10px] text-slate-400 leading-tight">
                           Immediate live camera capture only. File uploads are disabled for NIST IAL2 liveness.

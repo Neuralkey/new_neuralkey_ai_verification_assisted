@@ -90,13 +90,15 @@ export interface ApplicantProfile {
   submittedAt: string;
   avatarUrl: string;
   documentSvgOrUrl: string;
+  documentBackUrl?: string;
   selfieUrl: string;
+  livenessFrames?: Partial<Record<'lookLeft' | 'lookRight' | 'smile' | 'blink', string>>;
   expectedOutcome: 'APPROVE' | 'REJECT' | 'ESCALATE';
   scenarioTag: string;
   scenarioDescription: string;
   benchmarkGroundTruth?: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'ESCALATED';
-  trustLevel?: 'TIER_0_UNVERIFIED' | 'TIER_1_BASIC' | 'TIER_3_IAL3_VERIFIED';
+  trustLevel?: 'TIER_0_UNVERIFIED' | 'TIER_1_BASIC' | 'TIER_2_IAL2_VERIFIED' | 'TIER_3_IAL3_VERIFIED';
 }
 
 export interface VerifiableCredential {
@@ -115,7 +117,7 @@ export interface VerifiableCredential {
     kycStatus: string;
     riskScoreAtIssuance: number;
     assuranceLevel: string;
-    trustLevel: string; // 'NEURALKEY_UPGRADED_LEVEL_3'
+    trustLevel: string; // 'NEURALKEY_UPGRADED_LEVEL_2'
     verifiedAttributes: {
       documentType: string;
       documentNumberHash: string;

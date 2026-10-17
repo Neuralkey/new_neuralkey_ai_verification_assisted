@@ -47,6 +47,7 @@ export const RelyingPartyBank: React.FC<RelyingPartyBankProps> = ({
   const isApproved =
     decisionStatus === 'APPROVED' ||
     issuedCredential !== null ||
+    applicant.trustLevel === 'TIER_2_IAL2_VERIFIED' ||
     applicant.trustLevel === 'TIER_3_IAL3_VERIFIED';
   const isRejected = decisionStatus === 'REJECTED';
   const isEscalated = decisionStatus === 'ESCALATED';
@@ -176,7 +177,7 @@ export const RelyingPartyBank: React.FC<RelyingPartyBankProps> = ({
                 {isApproved ? (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    <span>Verified (Level 3)</span>
+                    <span>Verified (Level 2)</span>
                   </span>
                 ) : isRejected ? (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-300 border border-red-500/40 shadow-sm">
