@@ -1,0 +1,5 @@
+{
+  "summary": "Prototype Workflow Screenshots:\n1. Applicant submits an ID and selfie (Applicant Wallet -> Submit ID)\n2. Gemini analyzes the ID (Reviewer Console -> Forensics & Liveness)\n3. Reviewer sees the flag and risk summary (Reviewer Console -> Marcus A. Vance synthetic fraud case)\n4. Credential issued after approval (Applicant Wallet -> Verified W3C Credential with Tier 3 Trust Upgrade)",
+  "updatedAt": "2026-10-13T12:49:50.441160929Z",
+  "userFacing": true
+}

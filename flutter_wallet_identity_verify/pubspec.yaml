@@ -1,0 +1,30 @@
+name: neuralkey_did_wallet
+description: "Neuralkey DID Wallet - Identity Verify (IAL2 upgrade) Flutter Feature"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  get: ^4.6.6
+  flutter_secure_storage: ^9.2.2
+  camera: ^0.11.0+2
+  google_mlkit_text_recognition: ^0.14.0
+  google_mlkit_face_detection: ^0.12.0
+  cryptography: ^2.7.2
+  image: ^4.2.0
+  local_auth: ^2.3.0
+  http: ^1.2.0
+  intl: ^0.19.0
+  path_provider: ^2.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

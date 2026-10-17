@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@layer base {
+  button,
+  [role="button"],
+  select,
+  input[type="submit"],
+  input[type="button"],
+  input[type="reset"],
+  input[type="file"],
+  label[for],
+  summary,
+  .clickable {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role="button"][aria-disabled="true"],
+  select:disabled,
+  input:disabled {
+    cursor: not-allowed;
+  }
+}
+
+/* Fallback direct rule */
+button,
+[role="button"],
+select,
+summary {
+  cursor: pointer;
+}
+
+.font-khmer {
+  font-family: 'Noto Sans Khmer', system-ui, -apple-system, sans-serif;
+}
+
+html,
+body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+.no-scrollbar::-webkit-scrollbar,
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar,
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
