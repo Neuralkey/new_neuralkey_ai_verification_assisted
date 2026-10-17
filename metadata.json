@@ -1,6 +1,6 @@
 {
   "name": "Neuralkey Verification Assistant",
   "description": "Gemini-assisted identity proofing console that helps human reviewers detect synthetic fraud faster, featuring automated consistency checks, explainable risk signals, and W3C Verifiable Credentials.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["camera"],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

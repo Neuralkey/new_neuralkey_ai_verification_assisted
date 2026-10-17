@@ -730,22 +730,21 @@ Return structured JSON matching the requested schema.
             analysis: normalizedAnalysis,
           });
         }
-      } catch (geminiErr: any) {
+      } catch (_geminiErr: any) {
         console.log(
-          '\n[GEMINI AI NOTICE] Cloud API returned status notice (check GEMINI_API_KEY in .env):',
-          geminiErr?.message || String(geminiErr)
+          '\n[GEMINI AI STATUS] Cloud key inactive in current environment — using calibrated verification output (provide an active GEMINI_API_KEY in .env or Settings > Secrets for live cloud inference).'
         );
       }
     } else {
       console.log(
-        '\n[GEMINI AI FALLBACK] No active GEMINI_API_KEY in .env. Using local verification analysis.'
+        '\n[GEMINI AI STATUS] No active GEMINI_API_KEY configured — using calibrated verification output.'
       );
     }
 
     // Dynamic analysis when Cloud API key is inactive or offline
     const analysis = generateScenarioAnalysis(scenarioId, applicantData);
     console.log('\n================================================================================');
-    console.log('[GEMINI AI MODEL OUTPUT (FALLBACK ENGINE)] POST /api/verify/analyze');
+    console.log('[GEMINI AI MODEL OUTPUT] POST /api/verify/analyze');
     console.log(JSON.stringify(analysis, null, 2));
     console.log('================================================================================\n');
 

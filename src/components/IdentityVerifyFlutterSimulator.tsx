@@ -363,7 +363,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   >([]);
 
   // ---------------------------------------------------------------------------
-  // STEP 2 STATE: Document Capture & Validation (Real Camera + File Upload)
+  // STEP 2 STATE: Document Capture & Validation (Live Camera Only - Upload Prohibited)
   // ---------------------------------------------------------------------------
   const [captureSide, setCaptureSide] = useState<'FRONT' | 'BACK'>('FRONT');
   const [torchOn, setTorchOn] = useState<boolean>(false);
@@ -376,11 +376,10 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   const [docCameraActive, setDocCameraActive] = useState<boolean>(false);
   const docVideoRef = useRef<HTMLVideoElement | null>(null);
   const docStreamRef = useRef<MediaStream | null>(null);
-  const docFileInputRef = useRef<HTMLInputElement | null>(null);
   const [hasImageOnDisk, setHasImageOnDisk] = useState<boolean>(true);
 
   // ---------------------------------------------------------------------------
-  // STEP 3 STATE: Active Biometric Liveness (Real Front Camera + Selfie Upload)
+  // STEP 3 STATE: Active Biometric Liveness (Live Front Camera Only - Upload Prohibited)
   // ---------------------------------------------------------------------------
   const [challengeIndex, setChallengeIndex] = useState<number>(0);
   const [awaitingNeutral, setAwaitingNeutral] = useState<boolean>(false);
@@ -390,7 +389,6 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   const [selfieCameraActive, setSelfieCameraActive] = useState<boolean>(false);
   const selfieVideoRef = useRef<HTMLVideoElement | null>(null);
   const selfieStreamRef = useRef<MediaStream | null>(null);
-  const selfieFileInputRef = useRef<HTMLInputElement | null>(null);
   const [actionScores, setActionScores] = useState<Record<LivenessAction, number>>({
     lookLeft: 0,
     lookRight: 0,
@@ -456,11 +454,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
         }
       }, 50);
     } catch {
-      showBanner(
-        'Camera Unavailable',
-        'Use the Upload Photo button below or tap the camera button to capture.',
-        'warning'
-      );
+      setDocCameraActive(false);
     }
   };
 
@@ -853,7 +847,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   };
 
   // ---------------------------------------------------------------------------
-  // STEP 2 METHODS (Real Photo Upload, Live Camera Frame, or Canvas PNG)
+  // STEP 2 METHODS (Live Camera Frame Only - File Upload Prohibited)
   // ---------------------------------------------------------------------------
   const openStep2GovDoc = () => {
     if (!userUpdatedProfile) {
@@ -870,33 +864,6 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
     setFrontCompressedBytes(null);
     setBackCompressedBytes(null);
     setCurrentRoute('/take_gov_document');
-  };
-
-  const handleDocFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = typeof reader.result === 'string' ? reader.result : null;
-      if (!dataUrl) return;
-      if (captureSide === 'FRONT') {
-        setFrontImageDataUrl(dataUrl);
-        showBanner(
-          'Front Photo Loaded',
-          'Tap the camera button below to confirm front side and continue to back side',
-          'success'
-        );
-      } else {
-        setBackImageDataUrl(dataUrl);
-        showBanner(
-          'Back Photo Loaded',
-          'Tap the camera button below to confirm back side and finish Step 02',
-          'success'
-        );
-      }
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
   };
 
   const handleCaptureGovDocument = async () => {
@@ -918,7 +885,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
       setCaptureSide('BACK');
       showBanner(
         'Front side scanned',
-        'Now align or upload the back side of your ID and tap the camera button',
+        'Now align the back side of your ID in the live camera and tap the camera button',
         'warning'
       );
       return;
@@ -950,7 +917,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
   };
 
   // ---------------------------------------------------------------------------
-  // STEP 3 METHODS (Real Front Camera Liveness + Selfie Upload)
+  // STEP 3 METHODS (Real Front Camera Liveness Only - File Upload Prohibited)
   // ---------------------------------------------------------------------------
   const openStep3FaceScan = () => {
     if (!userUpdatedProfile) {
@@ -976,31 +943,6 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
     setActionScores({ lookLeft: 0, lookRight: 0, smile: 0, blink: 0 });
     setLivePose({ rawYaw: 0, smilingProb: 0.04, leftEyeOpen: 0.96, rightEyeOpen: 0.96 });
     setCurrentRoute('/scan_verify');
-  };
-
-  const handleSelfieFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = typeof reader.result === 'string' ? reader.result : null;
-      if (!dataUrl) return;
-      setSelfieImageDataUrl(dataUrl);
-      livenessCancelRef.current = true;
-      stopSelfieCamera();
-      localStorage.setItem(sKey(STORAGE_KEYS.LIVENESS_SCORE), '0.970');
-      localStorage.setItem(sKey(STORAGE_KEYS.FACE_SCAN_DONE), 'true');
-      setFaceScanDone(true);
-      setAutoRunningLiveness(false);
-      popBackToVerify();
-      showBanner(
-        'Selfie Photo Loaded',
-        'Your biometric face photo is ready for Gemini AI verification',
-        'success'
-      );
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
   };
 
   const correctedYaw = livePose.rawYaw;
@@ -1172,9 +1114,14 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
     handleFinishLivenessWithResult(true, mean);
   };
 
-  // Start real front camera and auto-run liveness challenges when entering /scan_verify
+  // Start real camera on /take_gov_document and /scan_verify (Live Camera Only)
   useEffect(() => {
-    if (currentRoute === '/scan_verify') {
+    if (currentRoute === '/take_gov_document') {
+      startDocCamera();
+      return () => {
+        stopDocCamera();
+      };
+    } else if (currentRoute === '/scan_verify') {
       startSelfieCamera();
       livenessCancelRef.current = false;
       const timer = setTimeout(() => {
@@ -1188,7 +1135,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
         stopSelfieCamera();
         clearTimeout(timer);
       };
-    } else if (currentRoute !== '/take_gov_document') {
+    } else {
       stopDocCamera();
       stopSelfieCamera();
     }
@@ -2190,18 +2137,10 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
         )}
 
         {/* ------------------------------------------------------------- */}
-        {/* ROUTE 3: Step 2 Government ID Capture (Front -> Back Display) */}
+        {/* ROUTE 3: Step 2 Government ID Capture (Live Camera Only)      */}
         {/* ------------------------------------------------------------- */}
         {currentRoute === '/take_gov_document' && (
           <div className="flex-1 flex flex-col justify-between bg-black relative overflow-hidden">
-            <input
-              ref={docFileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleDocFileSelected}
-              className="hidden"
-            />
-
             {/* Top Bar */}
             <div className="p-3 bg-slate-950/90 border-b border-slate-800 z-20 space-y-2">
               {/* Side indicator pills */}
@@ -2238,33 +2177,28 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                 </button>
               </div>
 
-              {/* Instruction banner + Real Camera / Upload controls */}
+              {/* Instruction banner + Live Camera Only security badge */}
               <div className="text-center text-[11px] font-bold text-white bg-slate-900/90 py-1.5 px-3 rounded-xl border border-slate-800">
                 {captureSide === 'FRONT'
-                  ? `Align or upload the FRONT of your ${profileData.documentType} and tap the camera icon`
-                  : `Now align or upload the BACK of your ${profileData.documentType} and tap the camera icon`}
+                  ? `Align the FRONT of your ${profileData.documentType} in the live camera frame`
+                  : `Now align the BACK of your ${profileData.documentType} in the live camera frame`}
               </div>
 
-              <div className="flex items-center justify-center gap-2">
+              <div className="flex items-center justify-between gap-2 px-1">
+                <span className="text-[10px] text-amber-400 font-mono font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                  Live Camera Only · Upload Prohibited
+                </span>
                 <button
                   type="button"
                   onClick={() => (docCameraActive ? stopDocCamera() : startDocCamera())}
-                  className={`px-2.5 py-1 rounded-lg text-[10.5px] font-semibold border flex items-center gap-1 cursor-pointer transition-colors ${
+                  className={`px-2.5 py-0.5 rounded-lg text-[10px] font-semibold border flex items-center gap-1 cursor-pointer transition-colors ${
                     docCameraActive
                       ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300'
                       : 'bg-slate-900 border-slate-700 text-cyan-300 hover:bg-slate-800'
                   }`}
                 >
                   <Camera className="w-3 h-3" />
-                  <span>{docCameraActive ? 'Stop Live Camera' : 'Use Live Camera'}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => docFileInputRef.current?.click()}
-                  className="px-2.5 py-1 rounded-lg text-[10.5px] font-semibold bg-slate-900 hover:bg-slate-800 border border-slate-700 text-amber-300 flex items-center gap-1 cursor-pointer transition-colors"
-                >
-                  <Upload className="w-3 h-3" />
-                  <span>Upload {captureSide === 'FRONT' ? 'Front' : 'Back'} Photo</span>
+                  <span>{docCameraActive ? 'Sensor Active' : 'Enable Camera'}</span>
                 </button>
               </div>
             </div>
@@ -2286,28 +2220,6 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                   />
                   <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/70 text-[10px] font-mono text-emerald-400 border border-emerald-500/40">
                     ● LIVE CAMERA ({captureSide} SIDE)
-                  </div>
-                </div>
-              ) : captureSide === 'FRONT' && frontImageDataUrl ? (
-                <div className="w-full rounded-2xl border-2 border-emerald-400 overflow-hidden relative shadow-2xl bg-slate-950 p-2">
-                  <img
-                    src={frontImageDataUrl}
-                    alt="Uploaded Front ID"
-                    className="w-full max-h-52 object-contain rounded-xl mx-auto"
-                  />
-                  <div className="mt-1.5 text-center text-[10px] text-emerald-300 font-semibold">
-                    ✓ Real Front ID Photo Loaded — Tap Camera Button Below to Confirm
-                  </div>
-                </div>
-              ) : captureSide === 'BACK' && backImageDataUrl ? (
-                <div className="w-full rounded-2xl border-2 border-emerald-400 overflow-hidden relative shadow-2xl bg-slate-950 p-2">
-                  <img
-                    src={backImageDataUrl}
-                    alt="Uploaded Back ID"
-                    className="w-full max-h-52 object-contain rounded-xl mx-auto"
-                  />
-                  <div className="mt-1.5 text-center text-[10px] text-emerald-300 font-semibold">
-                    ✓ Real Back ID Photo Loaded — Tap Camera Button Below to Confirm
                   </div>
                 </div>
               ) : captureSide === 'FRONT' ? (
@@ -2576,18 +2488,10 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
         )}
 
         {/* ------------------------------------------------------------- */}
-        {/* ROUTE 4: Step 3 Active Biometric Liveness                     */}
+        {/* ROUTE 4: Step 3 Active Biometric Liveness (Live Camera Only)  */}
         {/* ------------------------------------------------------------- */}
         {currentRoute === '/scan_verify' && (
           <div className="flex-1 flex flex-col justify-between bg-slate-950 relative overflow-hidden">
-            <input
-              ref={selfieFileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleSelfieFileSelected}
-              className="hidden"
-            />
-
             {screenFillLight && (
               <div
                 className="absolute inset-0 pointer-events-none z-30"
@@ -2598,9 +2502,14 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
             {/* Top HUD */}
             <div className="p-3.5 bg-slate-950/90 border-b border-slate-800 z-20 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-cyan-300">
-                  Face Verification {selfieCameraActive ? '· Live Camera' : ''}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-cyan-300">
+                    Face Verification
+                  </span>
+                  <span className="text-[9.5px] text-amber-400 font-mono font-bold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                    Upload Prohibited
+                  </span>
+                </div>
 
                 <button
                   type="button"
@@ -2655,7 +2564,7 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                       faceDetected ? 'bg-emerald-400' : 'bg-rose-400'
                     }`}
                   />
-                  <span>{faceDetected ? 'Face Positioned Correctly' : 'Position Face in Center'}</span>
+                  <span>{faceDetected ? 'Live Camera Sensor Active' : 'Position Face in Center'}</span>
                 </div>
               </div>
 
@@ -2739,25 +2648,14 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={handleInstantOneTapCapture}
-                      className="py-2.5 px-2.5 rounded-xl bg-gradient-to-r from-cyan-600 via-blue-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white font-bold text-xs cursor-pointer flex items-center justify-center gap-1.5 shadow-lg transition-all"
-                    >
-                      <Camera className="w-3.5 h-3.5 text-white shrink-0" />
-                      <span>Capture Live</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => selfieFileInputRef.current?.click()}
-                      className="py-2.5 px-2.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-700 text-amber-300 font-bold text-xs cursor-pointer flex items-center justify-center gap-1.5 transition-all"
-                    >
-                      <Upload className="w-3.5 h-3.5 shrink-0" />
-                      <span>Upload Selfie</span>
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={handleInstantOneTapCapture}
+                    className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-cyan-600 via-blue-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white font-bold text-xs cursor-pointer flex items-center justify-center gap-1.5 shadow-lg transition-all"
+                  >
+                    <Camera className="w-3.5 h-3.5 text-white shrink-0" />
+                    <span>Capture Live Camera Now</span>
+                  </button>
                 </div>
               )}
 

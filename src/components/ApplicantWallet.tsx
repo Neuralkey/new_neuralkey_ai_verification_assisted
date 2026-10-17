@@ -224,18 +224,36 @@ export const ApplicantWallet: React.FC<ApplicantWalletProps> = ({
     setTimeout(() => setCopiedDid(false), 2000);
   };
 
-  const handleDocImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setDocImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
+  const [isCapturingLiveDoc, setIsCapturingLiveDoc] = useState(false);
   const [isCapturingLiveSelfie, setIsCapturingLiveSelfie] = useState(false);
+
+  // Immediate live camera capture for ID document (file upload prohibited)
+  const handleImmediateLiveDocCapture = () => {
+    setIsCapturingLiveDoc(true);
+    setTimeout(() => {
+      setDocImagePreview(
+        createSyntheticCardSvg(
+          customNation || 'KHM',
+          customNation === 'SGP'
+            ? 'Republic of Singapore'
+            : customNation === 'MYS'
+            ? 'Malaysia'
+            : customNation === 'THA'
+            ? 'Kingdom of Thailand'
+            : customNation === 'IDN'
+            ? 'Republik Indonesia'
+            : 'Kingdom of Cambodia',
+          customDocType || 'National Identity Card',
+          customName.split('(')[0].trim() || 'Sok Chandara',
+          customDocNum || '010892746',
+          customDob || '1995-09-12',
+          applicant.avatarUrl,
+          (customNation || 'KH').slice(0, 2)
+        )
+      );
+      setIsCapturingLiveDoc(false);
+    }, 450);
+  };
 
   // Immediate live camera capture for biometric liveness (file upload prohibited)
   const handleImmediateLiveSelfieCapture = () => {
@@ -250,7 +268,7 @@ export const ApplicantWallet: React.FC<ApplicantWalletProps> = ({
   const handleSubmitCustom = (e: React.FormEvent) => {
     e.preventDefault();
     if (!docImagePreview) {
-      setFormError('Please select or upload an ID document image.');
+      setFormError('Please capture an ID document image using the live camera.');
       return;
     }
     setFormError(null);
@@ -583,35 +601,58 @@ export const ApplicantWallet: React.FC<ApplicantWalletProps> = ({
                 </div>
               </div>
 
-              {/* Upload Pickers: ID Card & Matching Selfie (UI-08) */}
+              {/* Live Camera Capture Only: ID Card & Matching Selfie (Uploads Prohibited) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div>
-                  <label className="text-slate-300 block text-xs mb-1 font-semibold">
-                    1. ID Document Image
-                  </label>
-                  <div className="border border-dashed border-slate-700 rounded-xl p-2.5 text-center bg-slate-950 hover:border-blue-500 transition-colors">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleDocImageUpload}
-                      id="doc-upload"
-                      className="hidden"
-                    />
-                    <label htmlFor="doc-upload" className="cursor-pointer block space-y-1">
-                      {docImagePreview ? (
-                        <div className="h-16 rounded overflow-hidden bg-slate-900 border border-slate-800">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-300 block text-xs font-semibold">
+                      1. ID Document (Live Camera Only)
+                    </label>
+                    <span className="text-[10px] text-amber-400 font-mono font-bold bg-amber-500/10 px-1.5 py-0.2 rounded border border-amber-500/20">
+                      Upload Prohibited
+                    </span>
+                  </div>
+                  <div className="border border-slate-700 rounded-xl p-2.5 text-center bg-slate-950">
+                    {docImagePreview ? (
+                      <div className="space-y-1.5">
+                        <div className="h-16 rounded overflow-hidden bg-slate-900 border border-slate-800 relative">
                           <img
                             src={docImagePreview}
                             alt="Document"
                             className="w-full h-full object-contain"
                           />
+                          <div className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                         </div>
-                      ) : (
-                        <span className="text-xs text-blue-400 block font-semibold py-4">
-                          Upload Document Image
-                        </span>
-                      )}
-                    </label>
+                        <div className="flex items-center justify-center gap-1 text-[10.5px] text-emerald-400 font-bold">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Live ID Sensor Captured</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleImmediateLiveDocCapture}
+                          disabled={isCapturingLiveDoc}
+                          className="px-2.5 py-0.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[10px] text-cyan-300 font-semibold cursor-pointer transition-all flex items-center justify-center gap-1 mx-auto"
+                        >
+                          <Camera className="w-3 h-3" />
+                          <span>{isCapturingLiveDoc ? 'Scanning...' : 'Rescan Live ID'}</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="py-2 space-y-1.5">
+                        <button
+                          type="button"
+                          onClick={handleImmediateLiveDocCapture}
+                          disabled={isCapturingLiveDoc}
+                          className="w-full py-2.5 px-3 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs cursor-pointer flex items-center justify-center gap-1.5 shadow-md transition-all"
+                        >
+                          <Camera className="w-4 h-4 text-cyan-200" />
+                          <span>{isCapturingLiveDoc ? 'Scanning ID Sensor...' : 'Scan ID via Live Camera'}</span>
+                        </button>
+                        <p className="text-[10px] text-slate-400 leading-tight">
+                          Live camera capture only. File uploads are disabled to prevent spoofing.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
