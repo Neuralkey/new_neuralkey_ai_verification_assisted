@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   User,
   Scan,
+  Cpu,
 } from 'lucide-react';
 import { ApplicantProfile, ForensicAnalysis, FraudSignal } from '../types';
 
@@ -22,6 +23,10 @@ interface DocumentInspectionViewerProps {
   customSelfieUrl?: string;
   hoveredFlagIndex?: number | null;
   onHoverFlag?: (index: number | null) => void;
+  isAnalyzingWithGemini?: boolean;
+  onRunGeminiAnalysis?: () => void;
+  onOpenBenchmarkModal?: () => void;
+  analysisLatencyMs?: number;
 }
 
 export const DocumentInspectionViewer: React.FC<DocumentInspectionViewerProps> = ({
@@ -31,6 +36,9 @@ export const DocumentInspectionViewer: React.FC<DocumentInspectionViewerProps> =
   customSelfieUrl,
   hoveredFlagIndex,
   onHoverFlag,
+  isAnalyzingWithGemini,
+  onRunGeminiAnalysis,
+  analysisLatencyMs,
 }) => {
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [filterMode, setFilterMode] = useState<'normal' | 'uv' | 'contrast'>('normal');
@@ -117,14 +125,18 @@ export const DocumentInspectionViewer: React.FC<DocumentInspectionViewerProps> =
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 sm:p-4 shadow-sm space-y-3 min-w-0 overflow-hidden">
       {/* Viewer Header & Controls (UI-01, UI-11): Stacked 2-row header so toolbar never clips */}
       <div className="flex flex-col gap-2 pb-2.5 border-b border-slate-800 text-xs min-w-0">
-        {/* Row 1: Document Title & Number */}
-        <div className="flex items-center justify-between gap-2 min-w-0">
+        {/* Row 1: Document Title & Number + Gemini AI Task Badge */}
+        <div className="flex flex-wrap items-center justify-between gap-2 min-w-0">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <span
               className="font-bold text-slate-200 text-sm truncate"
               title={applicant.documentType}
             >
               {applicant.documentType.split('(')[0].trim()}
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 border border-cyan-500/30 text-[10px] font-semibold text-cyan-300 shrink-0">
+              <Sparkles className="w-3 h-3 text-cyan-400" />
+              <span>Vision OCR &amp; ROI Inspector</span>
             </span>
           </div>
           <span className="font-mono text-xs px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-cyan-300 shrink-0">
@@ -208,10 +220,53 @@ export const DocumentInspectionViewer: React.FC<DocumentInspectionViewerProps> =
         </div>
       </div>
 
+      {/* Gemini AI Live Model Control Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-950 border border-blue-500/30 text-xs">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></div>
+          <span className="font-bold text-white flex items-center gap-1.5">
+            <Cpu className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Model: gemini-3.8-flash</span>
+          </span>
+          {analysisLatencyMs ? (
+            <span className="text-[10px] font-mono text-slate-400 hidden md:inline">
+              Latency: {analysisLatencyMs}ms
+            </span>
+          ) : null}
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          {onRunGeminiAnalysis && (
+            <button
+              onClick={onRunGeminiAnalysis}
+              disabled={isAnalyzingWithGemini}
+              className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold text-xs flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+              title="Run real Gemini 3.8 Flash multimodal extraction, MRZ decoding, and fraud scoring"
+            >
+              <Sparkles className={`w-3.5 h-3.5 ${isAnalyzingWithGemini ? 'animate-spin text-cyan-200' : 'text-cyan-300'}`} />
+              <span>{isAnalyzingWithGemini ? 'Extracting & Checking...' : 'Run Gemini Analysis'}</span>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Main Centre Inspection Workspace: ID Card and Selfie Beside It (UI-01) */}
       <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-stretch min-w-0">
         {/* Left (or main): Large ID Document Viewer with Bounding Boxes (8 cols) */}
-        <div className="sm:col-span-8 bg-slate-950 rounded-xl border border-slate-800/80 p-2.5 sm:p-3 flex flex-col items-center justify-center relative overflow-hidden min-h-[260px] min-w-0">
+        <div className="sm:col-span-8 bg-slate-950 rounded-xl border border-slate-800/80 p-2.5 sm:p-3 flex flex-col justify-between relative overflow-hidden min-h-[260px] min-w-0">
+          {/* Sub-Card Task Label Header */}
+          <div className="w-full flex flex-wrap items-center justify-between gap-1.5 pb-2 mb-2 border-b border-slate-800/80 text-[11px]">
+            <span className="font-bold text-slate-200 flex items-center gap-1.5">
+              <Scan className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <span>ID Document Visual &amp; Bounding Box Output</span>
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30 text-[10px] font-mono text-cyan-300">
+              <Sparkles className="w-2.5 h-2.5 text-cyan-400" />
+              <span>Vision OCR &amp; 2D Anomaly Detector</span>
+            </span>
+          </div>
+
+          <div className="flex-1 flex flex-col items-center justify-center relative w-full">
           {filterMode === 'uv' && (
             <div className="absolute top-2 left-2 z-20 px-2 py-0.5 rounded bg-purple-900/90 text-purple-200 text-[10px] font-medium border border-purple-500/40 flex items-center gap-1.5 shadow-md">
               <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
@@ -234,6 +289,17 @@ export const DocumentInspectionViewer: React.FC<DocumentInspectionViewerProps> =
               onClick={() => setIsLightboxOpen(true)}
               className="relative w-full min-h-[205px] rounded-xl overflow-hidden border-2 border-slate-700/80 shadow-2xl bg-gradient-to-br from-[#0c2238] via-[#081827] to-[#040e17] cursor-pointer group"
             >
+              {/* Active Scanner Line when Analyzing with Gemini */}
+              {isAnalyzingWithGemini && (
+                <div className="absolute inset-0 z-30 pointer-events-none overflow-hidden rounded-xl">
+                  <div className="w-full h-1 bg-cyan-400 shadow-[0_0_15px_#22d3ee] animate-pulse absolute top-1/2 -translate-y-1/2"></div>
+                  <div className="absolute inset-0 bg-cyan-500/10 backdrop-blur-[1px]"></div>
+                  <div className="absolute bottom-3 left-3 px-2 py-1 rounded bg-slate-950/90 text-cyan-300 font-mono text-[10px] border border-cyan-500/40 flex items-center gap-1.5 shadow-lg">
+                    <Sparkles className="w-3 h-3 text-cyan-400 animate-spin" />
+                    <span>Gemini 3.8 Flash Scanning...</span>
+                  </div>
+                </div>
+              )}
               {isUploadedRasterDoc ? (
                 <img
                   src={customDocUrl}
@@ -395,19 +461,26 @@ export const DocumentInspectionViewer: React.FC<DocumentInspectionViewerProps> =
               );
             })}
           </div>
+          </div>
         </div>
 
         {/* Right Beside It: Matching Selfie Portrait (UI-01) */}
         <div className="sm:col-span-4 bg-slate-950 rounded-xl border border-slate-800/80 p-2.5 sm:p-3 flex flex-col justify-between min-w-0">
           <div>
-            <div className="flex items-center justify-between gap-1 pb-2 mb-2 border-b border-slate-800 text-xs min-w-0">
-              <span className="font-bold text-slate-200 flex items-center gap-1.5 truncate">
-                <Camera className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span className="truncate">Live Selfie</span>
-              </span>
-              <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 shrink-0 whitespace-nowrap">
-                Verified Live
-              </span>
+            <div className="flex flex-col gap-1.5 pb-2 mb-2 border-b border-slate-800 text-xs min-w-0">
+              <div className="flex items-center justify-between gap-1 min-w-0">
+                <span className="font-bold text-slate-200 flex items-center gap-1.5 truncate">
+                  <Camera className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span className="truncate">Live Selfie</span>
+                </span>
+                <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 shrink-0 whitespace-nowrap">
+                  Verified Live
+                </span>
+              </div>
+              <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30 text-[10px] font-mono text-cyan-300 w-fit max-w-full">
+                <Sparkles className="w-2.5 h-2.5 text-cyan-400 shrink-0" />
+                <span className="truncate">Biometric Face Matcher</span>
+              </div>
             </div>
 
             {/* Portrait Frame */}
@@ -419,7 +492,15 @@ export const DocumentInspectionViewer: React.FC<DocumentInspectionViewerProps> =
               />
               <div className="absolute bottom-1.5 left-1.5 right-1.5 bg-slate-950/85 backdrop-blur-sm px-2 py-1 rounded border border-slate-800 text-[10px] text-slate-300 flex items-center justify-between gap-1">
                 <span className="truncate">Face Match</span>
-                <span className="font-mono text-emerald-400 font-bold shrink-0">
+                <span
+                  className={`font-mono font-bold shrink-0 ${
+                    analysis.biometricAnalysis.faceMatchStatus === 'MATCH'
+                      ? 'text-emerald-400'
+                      : analysis.biometricAnalysis.faceMatchStatus === 'INCONCLUSIVE'
+                      ? 'text-amber-400'
+                      : 'text-red-400'
+                  }`}
+                >
                   {analysis.biometricAnalysis.faceMatchScore}%
                 </span>
               </div>
@@ -427,25 +508,31 @@ export const DocumentInspectionViewer: React.FC<DocumentInspectionViewerProps> =
           </div>
 
           {/* Quick Cross-Check Status */}
-          <div className="mt-2.5 p-2 bg-slate-900 rounded-lg border border-slate-800 text-[11px] flex items-center justify-between gap-2 min-w-0">
-            <span className="text-slate-400 truncate">Photo Match:</span>
-            <span
-              className={`font-semibold flex items-center gap-1 shrink-0 ${
-                analysis.biometricAnalysis.faceMatchStatus === 'MATCH'
-                  ? 'text-emerald-400'
-                  : 'text-red-400'
-              }`}
-            >
-              {analysis.biometricAnalysis.faceMatchStatus === 'MATCH' ? (
-                <>
-                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> Matched
-                </>
-              ) : (
-                <>
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> Mismatch
-                </>
-              )}
-            </span>
+          <div className="mt-2.5 p-2 bg-slate-900 rounded-lg border border-slate-800 text-[11px] space-y-1 min-w-0">
+            <div className="flex items-center justify-between gap-2 min-w-0">
+              <span className="text-slate-400 truncate">Photo Match:</span>
+              <span
+                className={`font-semibold flex items-center gap-1 shrink-0 ${
+                  analysis.biometricAnalysis.faceMatchStatus === 'MATCH'
+                    ? 'text-emerald-400'
+                    : 'text-red-400'
+                }`}
+              >
+                {analysis.biometricAnalysis.faceMatchStatus === 'MATCH' ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" /> Matched
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> Mismatch
+                  </>
+                )}
+              </span>
+            </div>
+            <div className="text-[9.5px] font-mono text-cyan-400/90 flex items-center gap-1 truncate">
+              <Cpu className="w-2.5 h-2.5 shrink-0" />
+              <span className="truncate">Task: 1:1 ID Portrait vs. Liveness Verification</span>
+            </div>
           </div>
         </div>
       </div>

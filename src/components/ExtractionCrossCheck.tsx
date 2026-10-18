@@ -48,36 +48,54 @@ export const ExtractionCrossCheck: React.FC<ExtractionCrossCheckProps> = ({
   const rawLines = extractedMrzZone?.rawLines || [];
   const safeConsistencyChecks = consistencyChecks || [];
 
+  // Dynamically parse candidate holder name from raw MRZ lines
+  const printedName = extractedVisualZone?.fullName || applicant.fullName;
+  let mrzParsedName = printedName;
+  if (rawLines.length > 0) {
+    const line0 = rawLines[0].replace(/<+$/, '');
+    if (line0.startsWith('P<') || line0.startsWith('I<')) {
+      const nameSegment = line0.slice(5);
+      const nameParts = nameSegment.split('<<').map((t) => t.replace(/</g, ' ').trim()).filter(Boolean);
+      if (nameParts.length > 0) {
+        mrzParsedName = nameParts.join(', ');
+      }
+    }
+  }
+
+  const normDeclared = normalizeText(applicant.fullName);
+  const normPrinted = normalizeText(printedName);
+  const normMrz = normalizeText(mrzParsedName);
+
+  const isNameMismatch =
+    (Boolean(normPrinted) && Boolean(normMrz) && !normPrinted.includes(normMrz) && !normMrz.includes(normPrinted)) ||
+    (Boolean(normDeclared) && Boolean(normPrinted) && !normDeclared.includes(normPrinted) && !normPrinted.includes(normDeclared));
+
   const isDobMismatch =
     (Boolean(extractedMrzZone?.dateOfBirth) &&
+      Boolean(extractedVisualZone?.dateOfBirth) &&
       extractedVisualZone?.dateOfBirth !== extractedMrzZone?.dateOfBirth) ||
     (Boolean(applicant.dateOfBirth) &&
       Boolean(extractedVisualZone?.dateOfBirth) &&
       applicant.dateOfBirth !== extractedVisualZone?.dateOfBirth);
 
-  const isNameMismatch =
-    applicant.id === 'chhay_rathana' ||
-    (rawLines[0]?.includes('CHANTREA') && extractedVisualZone?.fullName?.includes('CHHAY')) ||
-    (Boolean(normalizeText(applicant.fullName)) &&
-      Boolean(normalizeText(extractedVisualZone?.fullName)) &&
-      normalizeText(applicant.fullName) !== normalizeText(extractedVisualZone?.fullName));
-
   const isDocNumMismatch =
     (Boolean(extractedMrzZone?.documentNumber) &&
-      extractedVisualZone?.documentNumber !== extractedMrzZone?.documentNumber) ||
+      Boolean(extractedVisualZone?.documentNumber) &&
+      normalizeText(extractedVisualZone?.documentNumber) !== normalizeText(extractedMrzZone?.documentNumber)) ||
     (Boolean(normalizeText(applicant.documentNumber)) &&
       Boolean(normalizeText(extractedVisualZone?.documentNumber)) &&
       normalizeText(applicant.documentNumber) !== normalizeText(extractedVisualZone?.documentNumber));
+
+  const validAseanIso = ['KHM', 'SGP', 'MYS', 'THA', 'IDN', 'VNM', 'PHL', 'LAO', 'MMR', 'BRN'];
+  const isCountryMismatch =
+    extractedMrzZone?.issuingState && !validAseanIso.includes(extractedMrzZone.issuingState);
 
   const fieldRows = [
     {
       label: 'Full Name',
       declared: applicant.fullName,
-      printed: extractedVisualZone?.fullName || applicant.fullName,
-      mrz:
-        applicant.id === 'chhay_rathana' || rawLines[0]?.includes('CHANTREA')
-          ? 'MEAS, CHANTREA'
-          : extractedVisualZone?.fullName || applicant.fullName,
+      printed: printedName,
+      mrz: mrzParsedName,
       isMismatch: isNameMismatch,
       statusNode: isNameMismatch
         ? renderStatus('FLAG', 'Name Mismatch')
@@ -120,11 +138,10 @@ export const ExtractionCrossCheck: React.FC<ExtractionCrossCheckProps> = ({
       declared: applicant.nationality,
       printed: extractedVisualZone?.issuingCountry || applicant.nationality,
       mrz: extractedMrzZone?.issuingState || applicant.nationality,
-      isMismatch: extractedMrzZone?.issuingState === 'PHI',
-      statusNode:
-        extractedMrzZone?.issuingState === 'PHI'
-          ? renderStatus('FLAG', 'Country Code Error')
-          : renderStatus('MATCH', 'Valid'),
+      isMismatch: Boolean(isCountryMismatch),
+      statusNode: isCountryMismatch
+        ? renderStatus('FLAG', 'Invalid ISO Code')
+        : renderStatus('MATCH', 'Valid'),
       mono: false,
     },
   ];
@@ -134,10 +151,14 @@ export const ExtractionCrossCheck: React.FC<ExtractionCrossCheckProps> = ({
       {/* Field Extraction & Zone Cross-Check */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-sm min-w-0 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-800 text-xs">
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
             <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" />
             <span className="font-bold text-slate-200 text-sm">
               Information Comparison
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 border border-cyan-500/30 text-[10px] font-mono text-cyan-300">
+              <Sparkles className="w-2.5 h-2.5 text-cyan-400" />
+              <span>Multimodal OCR &amp; MRZ Cross-Check</span>
             </span>
           </div>
           <span className="text-xs text-slate-400">
@@ -257,10 +278,14 @@ export const ExtractionCrossCheck: React.FC<ExtractionCrossCheckProps> = ({
       {/* Security Features & Automated Consistency Rules */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-sm min-w-0 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-800 text-xs">
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
             <CheckSquare className="w-4 h-4 text-emerald-400 shrink-0" />
             <span className="font-bold text-slate-200 text-sm">
               Document Security Checks
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 border border-cyan-500/30 text-[10px] font-mono text-cyan-300">
+              <Sparkles className="w-2.5 h-2.5 text-cyan-400" />
+              <span>ICAO 9303 &amp; Security Validator</span>
             </span>
           </div>
           <span className="text-xs text-slate-400 shrink-0">
@@ -281,8 +306,13 @@ export const ExtractionCrossCheck: React.FC<ExtractionCrossCheckProps> = ({
                   : 'bg-red-950/30 border-red-500/50'
               }`}
             >
-              <div className="space-y-0.5 sm:pr-2 min-w-0">
-                <span className="font-bold text-slate-100 text-xs block">{check.rule}</span>
+              <div className="space-y-1 sm:pr-2 min-w-0">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-bold text-slate-100 text-xs">{check.rule}</span>
+                  <span className="text-[9.5px] font-mono px-1.5 py-0.2 rounded bg-cyan-500/10 border border-cyan-500/25 text-cyan-300">
+                    Automated Verification Rule
+                  </span>
+                </div>
                 <p className="text-slate-300 text-xs leading-relaxed break-words">{check.details}</p>
               </div>
 

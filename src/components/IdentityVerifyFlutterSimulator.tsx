@@ -1866,31 +1866,6 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                   </span>
                 </div>
               </div>
-
-              {/* Next Steps Guide */}
-              <div className="p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800/80 space-y-2 text-[11.5px] text-slate-300">
-                <div className="font-bold text-slate-200 text-xs">
-                  What happens when the reviewer acts:
-                </div>
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                  <span>
-                    <strong className="text-emerald-300">Approve:</strong> Unlocks wallet and upgrades trust level from Level 1 to Level 2.
-                  </span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
-                  <span>
-                    <strong className="text-rose-300">Reject:</strong> Unlocks wallet so you can update and re-submit your ID.
-                  </span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                  <span>
-                    <strong className="text-amber-300">Escalate:</strong> Wallet remains locked while under specialist review.
-                  </span>
-                </div>
-              </div>
             </div>
 
             {/* Track Button on Lock Screen */}

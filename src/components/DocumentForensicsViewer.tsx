@@ -57,6 +57,10 @@ export const DocumentForensicsViewer: React.FC<DocumentForensicsViewerProps> = (
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 truncate max-w-full">
               {applicant.documentType.split('(')[0].trim()}
             </span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 border border-cyan-500/30 text-[10px] font-mono text-cyan-300">
+              <Sparkles className="w-2.5 h-2.5 text-cyan-400" />
+              <span>Optical &amp; Template Forensics</span>
+            </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
@@ -1343,10 +1347,14 @@ export const DocumentForensicsViewer: React.FC<DocumentForensicsViewerProps> = (
       {/* Biometric Liveness Capture & Facial Alignment Stream */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 sm:p-4 shadow-sm min-w-0 overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-800 text-xs">
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
             <Camera className="w-4 h-4 text-emerald-400 shrink-0" />
             <span className="font-bold text-slate-200 text-sm">
               Face &amp; Liveness Check
+            </span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 border border-cyan-500/30 text-[10px] font-mono text-cyan-300">
+              <Sparkles className="w-2.5 h-2.5 text-cyan-400" />
+              <span>Biometric &amp; Liveness Verification</span>
             </span>
           </div>
 
@@ -1388,9 +1396,9 @@ export const DocumentForensicsViewer: React.FC<DocumentForensicsViewerProps> = (
 
           {/* Biometric Scores & Diagnostics */}
           <div className="space-y-3 text-xs">
-            <div>
-              <div className="flex justify-between items-center text-xs mb-1">
-                <span className="text-slate-400">Face Match Score</span>
+            <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 space-y-1.5">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-300 font-semibold">Face Match Score</span>
                 <span
                   className={`font-mono font-bold ${
                     analysis.biometricAnalysis.faceMatchScore >= 80
@@ -1415,19 +1423,25 @@ export const DocumentForensicsViewer: React.FC<DocumentForensicsViewerProps> = (
                   style={{ width: `${analysis.biometricAnalysis.faceMatchScore}%` }}
                 ></div>
               </div>
+              <div className="text-[9.5px] font-mono text-cyan-400">
+                1:1 Facial Landmark &amp; Vector Matcher
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2 text-[11px]">
-              <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+              <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 space-y-0.5">
                 <span className="text-slate-400 block text-[10px]">Live Person Check</span>
-                <span className="font-bold text-emerald-400">
+                <span className="font-bold text-emerald-400 block">
                   Passed ({analysis.biometricAnalysis.livenessConfidence}%)
                 </span>
+                <span className="text-[9px] font-mono text-cyan-400/90 block">
+                  Multi-Pose Liveness AI
+                </span>
               </div>
-              <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+              <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 space-y-0.5">
                 <span className="text-slate-400 block text-[10px]">Photo Comparison</span>
                 <span
-                  className={`font-bold ${
+                  className={`font-bold block ${
                     analysis.biometricAnalysis.faceMatchStatus === 'MATCH'
                       ? 'text-emerald-400'
                       : analysis.biometricAnalysis.faceMatchStatus === 'INCONCLUSIVE'
@@ -1437,12 +1451,21 @@ export const DocumentForensicsViewer: React.FC<DocumentForensicsViewerProps> = (
                 >
                   {analysis.biometricAnalysis.faceMatchStatus === 'MATCH' ? 'Matched' : 'Mismatch'}
                 </span>
+                <span className="text-[9px] font-mono text-cyan-400/90 block">
+                  Portrait vs. Selfie AI
+                </span>
               </div>
             </div>
 
-            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950 p-2.5 rounded-lg border border-slate-800/80">
-              {analysis.biometricAnalysis.notes}
-            </p>
+            <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-800/80 space-y-1">
+              <div className="flex items-center gap-1 text-[10px] font-mono text-cyan-300">
+                <Sparkles className="w-2.5 h-2.5 text-cyan-400" />
+                <span>Biometric Diagnostic Summary</span>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                {analysis.biometricAnalysis.notes}
+              </p>
+            </div>
           </div>
         </div>
       </div>

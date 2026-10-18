@@ -19,7 +19,7 @@ import {
   History,
   Check,
 } from 'lucide-react';
-import { ApplicantProfile, ForensicAnalysis } from '../types';
+import { ApplicantProfile, ForensicAnalysis, AuditRecord } from '../types';
 import { DocumentInspectionViewer } from './DocumentInspectionViewer';
 import { DocumentForensicsViewer } from './DocumentForensicsViewer';
 import { ExtractionCrossCheck } from './ExtractionCrossCheck';
@@ -43,6 +43,11 @@ interface ReviewerConsoleProps {
   controlledActiveTab?: 'crosscheck' | 'pipeline' | 'forensics' | 'audit';
   onActiveTabChange?: (tab: 'crosscheck' | 'pipeline' | 'forensics' | 'audit') => void;
   onNavigateToWallet?: () => void;
+  isAnalyzingWithGemini?: boolean;
+  onRunGeminiAnalysis?: () => void;
+  onOpenBenchmarkModal?: () => void;
+  analysisLatencyMs?: number;
+  auditLogs?: AuditRecord[];
 }
 
 export const ReviewerConsole: React.FC<ReviewerConsoleProps> = ({
@@ -61,6 +66,11 @@ export const ReviewerConsole: React.FC<ReviewerConsoleProps> = ({
   controlledActiveTab,
   onActiveTabChange,
   onNavigateToWallet,
+  isAnalyzingWithGemini,
+  onRunGeminiAnalysis,
+  onOpenBenchmarkModal,
+  analysisLatencyMs,
+  auditLogs,
 }) => {
   // Filter state (responsive ASEAN scrollable filter and status filters)
   const [filterMode, setFilterMode] = useState<'all' | 'pending' | 'approved' | 'escalated' | 'rejected'>('all');
@@ -440,6 +450,10 @@ export const ReviewerConsole: React.FC<ReviewerConsoleProps> = ({
             customSelfieUrl={customSelfieUrl}
             hoveredFlagIndex={hoveredFlagIndex}
             onHoverFlag={setHoveredFlagIndex}
+            isAnalyzingWithGemini={isAnalyzingWithGemini}
+            onRunGeminiAnalysis={onRunGeminiAnalysis}
+            onOpenBenchmarkModal={onOpenBenchmarkModal}
+            analysisLatencyMs={analysisLatencyMs}
           />
 
           {/* 2. Tabs Below Centre: Details Check · Photo Check · Review History */}
@@ -504,7 +518,7 @@ export const ReviewerConsole: React.FC<ReviewerConsoleProps> = ({
               )}
 
               {activeTab === 'audit' && (
-                <AuditLedgerModal />
+                <AuditLedgerModal externalLogs={auditLogs} />
               )}
             </div>
           </div>
@@ -525,6 +539,14 @@ export const ReviewerConsole: React.FC<ReviewerConsoleProps> = ({
             hoveredFlagIndex={hoveredFlagIndex}
             onHoverFlag={setHoveredFlagIndex}
             onNavigateToWallet={onNavigateToWallet}
+            latestAuditRecord={
+              auditLogs?.find(
+                (r) =>
+                  r.applicantDid === activeApplicant.did ||
+                  r.applicantName === activeApplicant.fullName
+              ) || null
+            }
+            onViewAuditLog={() => setActiveTab('audit')}
           />
         </div>
       </div>

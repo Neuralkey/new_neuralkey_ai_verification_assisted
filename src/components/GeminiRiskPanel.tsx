@@ -96,19 +96,25 @@ export const GeminiRiskPanel: React.FC<GeminiRiskPanelProps> = ({
     <div className="flex flex-col h-full space-y-4 text-slate-100">
       {/* 1. Risk Assessment */}
       <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-4 space-y-3">
-        <div className="flex items-center justify-between pb-2.5 border-b border-slate-800/80 text-xs">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-cyan-400" />
-            <span className="font-bold text-white text-sm">Risk Summary</span>
+        <div className="flex flex-col gap-1.5 pb-2.5 border-b border-slate-800/80 text-xs">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-cyan-400" />
+              <span className="font-bold text-white text-sm">Risk Summary</span>
+            </div>
+            <span
+              className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-md border ${riskStyle.badge} ${riskStyle.border}`}
+            >
+              {riskAssessment.riskLevel} Risk
+            </span>
           </div>
-          <span
-            className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-md border ${riskStyle.badge} ${riskStyle.border}`}
-          >
-            {riskAssessment.riskLevel} Risk
-          </span>
+          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 border border-cyan-500/30 text-[10px] font-mono text-cyan-300 w-fit max-w-full">
+            <Sparkles className="w-2.5 h-2.5 text-cyan-400 shrink-0" />
+            <span className="truncate">Risk Scoring &amp; Triage Engine</span>
+          </div>
         </div>
 
-        <div className="grid grid-cols-12 gap-3 items-center">
+        <div className="grid grid-cols-12 gap-3 items-stretch">
           {/* Score Box */}
           <div className="col-span-5 bg-slate-950 p-3 rounded-xl border border-slate-800/80 flex flex-col items-center justify-center text-center">
             <span className="text-[11px] text-slate-400 font-medium mb-0.5">
@@ -120,13 +126,21 @@ export const GeminiRiskPanel: React.FC<GeminiRiskPanelProps> = ({
               </span>
               <span className="text-xs text-slate-500 font-mono">/100</span>
             </div>
+            <span className="text-[9px] font-mono text-cyan-400/90 mt-1">
+              Risk Scorer
+            </span>
           </div>
 
           {/* Recommendation */}
           <div className="col-span-7 bg-slate-950 p-3 rounded-xl border border-slate-800/80 space-y-1">
-            <span className="text-[11px] text-slate-400 block font-medium">
-              Recommendation
-            </span>
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[11px] text-slate-400 font-medium">
+                Recommendation
+              </span>
+              <span className="text-[9px] font-mono text-cyan-400/90">
+                Triage Engine
+              </span>
+            </div>
             <span
               className={`inline-block font-semibold px-2 py-0.5 rounded-md text-xs ${
                 riskAssessment.suggestedAction === 'APPROVE'
@@ -148,19 +162,31 @@ export const GeminiRiskPanel: React.FC<GeminiRiskPanelProps> = ({
           </div>
         </div>
 
-        <p className="text-slate-300 text-xs leading-relaxed bg-slate-950/70 p-3 rounded-xl border border-slate-800/70">
-          {riskAssessment.executiveSummary}
-        </p>
+        <div className="bg-slate-950/70 p-3 rounded-xl border border-slate-800/70 space-y-1">
+          <div className="flex items-center gap-1 text-[10px] font-mono text-cyan-300">
+            <Sparkles className="w-2.5 h-2.5 text-cyan-400 shrink-0" />
+            <span className="truncate">Executive Forensic Summary</span>
+          </div>
+          <p className="text-slate-300 text-xs leading-relaxed">
+            {riskAssessment.executiveSummary}
+          </p>
+        </div>
       </div>
 
       {/* 2. Issues Found */}
       <div className="bg-slate-900/90 border border-slate-800/90 rounded-2xl p-4 flex-1 flex flex-col">
-        <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-800/80 text-xs">
-          <div className="flex items-center gap-2">
-            <ShieldAlert className="w-4 h-4 text-amber-400" />
-            <span className="font-bold text-white text-sm">
-              Issues Found ({fraudSignals.length})
-            </span>
+        <div className="flex flex-col gap-1.5 pb-2.5 mb-2.5 border-b border-slate-800/80 text-xs">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-amber-400" />
+              <span className="font-bold text-white text-sm">
+                Issues Found ({fraudSignals.length})
+              </span>
+            </div>
+          </div>
+          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/10 border border-cyan-500/30 text-[10px] font-mono text-cyan-300 w-fit max-w-full">
+            <Sparkles className="w-2.5 h-2.5 text-cyan-400 shrink-0" />
+            <span className="truncate">Tamper &amp; Fraud Signal Detector</span>
           </div>
         </div>
 
@@ -172,6 +198,9 @@ export const GeminiRiskPanel: React.FC<GeminiRiskPanelProps> = ({
               <p className="text-xs text-slate-300">
                 All ID details match and no signs of editing were found.
               </p>
+              <div className="text-[9.5px] font-mono text-cyan-400/90 pt-0.5">
+                Anomaly &amp; Tamper Scanner
+              </div>
             </div>
           ) : (
             fraudSignals.map((signal, idx) => {
@@ -214,6 +243,10 @@ export const GeminiRiskPanel: React.FC<GeminiRiskPanelProps> = ({
                         >
                           {isCrit ? 'High' : isHigh ? 'Warning' : 'Notice'}
                         </span>
+                      </div>
+                      <div className="text-[9.5px] font-mono text-cyan-300/90 flex items-center gap-1">
+                        <Sparkles className="w-2.5 h-2.5 text-cyan-400 shrink-0" />
+                        <span className="truncate">Forensic Signal #{idx + 1}</span>
                       </div>
                       <p className="text-xs text-slate-300 leading-relaxed">
                         {signal.explanation}

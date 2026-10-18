@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Smartphone, Landmark, Info, RotateCcw } from 'lucide-react';
+import { Sparkles, Smartphone, Landmark, RotateCcw } from 'lucide-react';
 import { NeuralkeyLogo } from './NeuralkeyLogo';
 
 interface HeaderProps {
@@ -44,11 +44,10 @@ export const Header: React.FC<HeaderProps> = ({
             {onResetDemo && (
               <button
                 onClick={onResetDemo}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 hover:text-white transition-colors cursor-pointer"
+                className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 hover:text-white transition-colors cursor-pointer"
                 title="Reset"
               >
                 <RotateCcw className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span className="hidden sm:inline">Reset</span>
               </button>
             )}
           </div>
