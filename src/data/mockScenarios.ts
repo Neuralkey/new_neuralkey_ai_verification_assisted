@@ -1,4 +1,4 @@
-import { ApplicantProfile, ForensicAnalysis, GroundTruthLabel, BenchmarkMetrics } from '../types';
+import type { ApplicantProfile, ForensicAnalysis, GroundTruthLabel, BenchmarkMetrics } from '../types/index.ts';
 
 // ============================================================================
 // 40 SYNTHETIC IDENTITY DATASET: 20 GENUINE & 20 TAMPERED/FAKES

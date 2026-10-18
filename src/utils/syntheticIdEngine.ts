@@ -1,5 +1,5 @@
-import { ApplicantProfile, ForensicAnalysis, ConsistencyCheck, FraudSignal } from '../types';
-import { parseAndVerifyMrzLines, calculateIcaoCheckDigit } from './mrzValidator';
+import type { ApplicantProfile, ForensicAnalysis, ConsistencyCheck, FraudSignal } from '../types/index.ts';
+import { parseAndVerifyMrzLines, calculateIcaoCheckDigit } from './mrzValidator.ts';
 
 export interface DynamicAnalysisResult {
   analysis: ForensicAnalysis;

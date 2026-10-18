@@ -5,8 +5,8 @@ import dotenv from 'dotenv';
 import crypto from 'crypto';
 import Tesseract from 'tesseract.js';
 import { GoogleGenAI, Type } from '@google/genai';
-import { INITIAL_PRESETS, PRESET_ANALYSES, BENCHMARK_METRICS, GROUND_TRUTH_LABELS } from './src/data/mockScenarios';
-import { performDynamicIdAnalysis } from './src/utils/syntheticIdEngine';
+import { INITIAL_PRESETS, PRESET_ANALYSES, BENCHMARK_METRICS, GROUND_TRUTH_LABELS } from './src/data/mockScenarios.ts';
+import { performDynamicIdAnalysis } from './src/utils/syntheticIdEngine.ts';
 
 dotenv.config({ override: true });
 
@@ -1890,15 +1890,17 @@ app.get('/api/did/resolve/:did', (req, res) => {
 // -------------------------------------------------------------
 async function setupVite() {
   const isProd = process.env.NODE_ENV === 'production';
+
+  app.get(['/download/slides', '/download/pptx'], (_req, res) => {
+    const pptxPath = path.resolve(__dirname, 'public/Neuralkey_Submission_AI_Builder_Cup.pptx');
+    res.download(pptxPath, 'Neuralkey_Submission_AI_Builder_Cup.pptx');
+  });
+
   if (!isProd) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
-    });
-    app.get(['/download/slides', '/download/pptx'], (_req, res) => {
-      const pptxPath = path.resolve(__dirname, 'public/Neuralkey_Submission_AI_Builder_Cup.pptx');
-      res.download(pptxPath, 'Neuralkey_Submission_AI_Builder_Cup.pptx');
     });
 
     app.use(vite.middlewares);
