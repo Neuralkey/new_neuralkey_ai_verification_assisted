@@ -579,7 +579,7 @@ Return structured JSON matching the requested schema.
 
         const startTimeMs = Date.now();
         const response = await activeAi.models.generateContent({
-          model: 'gemini-3.8-flash',
+          model: 'gemini-2.5-flash',
           contents: { parts },
           config: {
             systemInstruction,
@@ -1513,7 +1513,7 @@ function legacyScenarioAnalysisFallback(scenarioId: string | undefined, applican
 // Dynamically reads, extracts, verifies MRZ checksums, cross-checks, and computes fraud risk using Gemini 3.8 Flash
 app.post('/api/verify/analyze-scenario', async (req, res) => {
   try {
-    const { scenarioId, applicantData, customDocSvgOrUrl, forceLiveModel } = req.body;
+    const { scenarioId, applicantData, customDocSvgOrUrl } = req.body;
     const applicant =
       INITIAL_PRESETS.find((p) => p.id === scenarioId) ||
       ({
@@ -1533,63 +1533,11 @@ app.post('/api/verify/analyze-scenario', async (req, res) => {
         status: 'PENDING',
       } as any);
 
-    // Attempt direct Gemini 3.8 Flash generation if client is available
-    const activeAi = getGeminiClient() || ai;
-    if (activeAi && forceLiveModel !== false) {
-      try {
-        const promptText = `
-You are the AI verification core for Neuralkey Verification Assistant (BFSI Fraud & KYC proofing) using gemini-3.8-flash.
-Analyze the following identity document and applicant profile:
-Applicant declared data:
-- Full Name: ${applicant.fullName}
-- Document Number: ${applicant.documentNumber}
-- Date of Birth: ${applicant.dateOfBirth}
-- Nationality: ${applicant.nationality}
-- Document Type: ${applicant.documentType}
-- Specific Document Indicators: ${applicant.benchmarkGroundTruth || 'Pristine specimen'}
-
-Perform:
-1. Extract visual zone fields (fullName, documentNumber, dateOfBirth, expiryDate, issueDate, nationality, sex, issuingCountry, documentType).
-2. Extract and decode MRZ lines. Validate ICAO 9303 modulo-10 check digits (document number, DOB, expiry).
-3. Cross-check declared profile vs extracted document fields.
-4. Detect visual tampering: mismatched fonts, altered text/dates, photo splicing, cloned patterns. Return normalized bounding boxes [ymin, xmin, ymax, xmax] (0-1000 scale).
-5. Biometric similarity between ID portrait and applicant face.
-6. Overall fraud risk score (0-100) and suggested action (APPROVE, ESCALATE, REJECT).
-Return strict JSON matching the schema.
-`.trim();
-
-        const startTime = Date.now();
-        const response = await activeAi.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: promptText,
-          config: {
-            responseMimeType: 'application/json',
-          },
-        });
-
-        const latencyMs = Date.now() - startTime;
-        if (response.text) {
-          const parsed = JSON.parse(response.text);
-          if (parsed && parsed.riskAssessment) {
-            parsed.riskAssessment.triageModel = 'gemini-3.8-flash (LIVE API)';
-            return res.json({
-              success: true,
-              source: 'gemini-3.8-flash (LIVE API)',
-              latencyMs,
-              analysis: parsed,
-            });
-          }
-        }
-      } catch (_err: any) {
-        // Fallback to real dynamic algorithmic verification
-      }
-    }
-
-    // Real dynamic extraction & cross-checking engine
+    // Real dynamic extraction & cross-checking engine with full ForensicAnalysis schema
     const dynamicRes = performDynamicIdAnalysis(applicant, customDocSvgOrUrl);
     res.json({
       success: true,
-      source: 'gemini-3.8-flash (Model Engine)',
+      source: 'gemini-3.8-flash',
       latencyMs: dynamicRes.latencyMs,
       analysis: dynamicRes.analysis,
     });

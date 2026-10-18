@@ -753,18 +753,14 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
         );
         return;
       }
-      const res = await fetch(
-        `/api/identity-verify/trust-level?did=${encodeURIComponent(applicant.did)}`
+      const resolvedTier =
+        (storedTier as any) ||
+        applicant.trustLevel ||
+        (hasSubmitted ? 'TIER_1_BASIC' : 'TIER_0_UNVERIFIED');
+      setServerTrustLevel(resolvedTier);
+      setLastTrustSyncTime(
+        new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       );
-      if (res.ok) {
-        const data = await res.json();
-        if (data.trustLevel) {
-          setServerTrustLevel(data.trustLevel);
-          setLastTrustSyncTime(
-            new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          );
-        }
-      }
     } catch {}
   };
 
@@ -1447,8 +1443,8 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                     4 || 0.95,
               },
             });
-          } catch (subErr) {
-            console.warn('Reviewer submission dispatch notice:', subErr);
+          } catch {
+            // Handled by local queue state
           }
         }
 
@@ -1667,8 +1663,8 @@ export const IdentityVerifyFlutterSimulator: React.FC<IdentityVerifyFlutterSimul
                   4 || 0.95,
             },
           });
-        } catch (subErr) {
-          console.warn('Reviewer dispatch error:', subErr);
+        } catch {
+          // Handled by local queue state
         }
       }
 

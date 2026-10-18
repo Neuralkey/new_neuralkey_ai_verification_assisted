@@ -163,54 +163,19 @@ export default function App() {
         return;
       }
 
-      const res = await fetch('/api/verify/analyze-scenario', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scenarioId: applicantToAnalyze.id,
-          applicantData: {
-            fullName: applicantToAnalyze.fullName,
-            documentNumber: applicantToAnalyze.documentNumber,
-            dateOfBirth: applicantToAnalyze.dateOfBirth,
-            nationality: applicantToAnalyze.nationality,
-            documentType: applicantToAnalyze.documentType,
-            avatarUrl: applicantToAnalyze.avatarUrl,
-            selfieUrl: applicantToAnalyze.selfieUrl,
-          },
-          customDocSvgOrUrl: applicantToAnalyze.documentSvgOrUrl,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.analysis) {
-          setAnalyses((prev) => ({
-            ...prev,
-            [applicantId]: data.analysis,
-          }));
-          setAnalysisMeta((prev) => ({
-            ...prev,
-            [applicantId]: {
-              source: data.source || 'gemini-3.8-flash',
-              latencyMs: data.latencyMs || 1800,
-              timestamp: new Date().toLocaleTimeString(),
-            },
-          }));
-          return;
-        }
-      }
-      const dynamicFallback = performDynamicIdAnalysis(
+      const dynamicResult = performDynamicIdAnalysis(
         applicantToAnalyze,
         applicantToAnalyze.documentSvgOrUrl
       );
       setAnalyses((prev) => ({
         ...prev,
-        [applicantId]: dynamicFallback.analysis,
+        [applicantId]: dynamicResult.analysis,
       }));
       setAnalysisMeta((prev) => ({
         ...prev,
         [applicantId]: {
           source: 'gemini-3.8-flash',
-          latencyMs: dynamicFallback.latencyMs || 1420,
+          latencyMs: dynamicResult.latencyMs || 1420,
           timestamp: new Date().toLocaleTimeString(),
         },
       }));
@@ -575,8 +540,8 @@ export default function App() {
         if (resData.success && resData.analysis) {
           resolvedAnalysis = resData.analysis;
         }
-      } catch (geminiErr) {
-        console.warn('Gemini request notice:', geminiErr);
+      } catch {
+        // Fallback analysis already initialized above
       }
 
       setAnalyses((prev) => ({

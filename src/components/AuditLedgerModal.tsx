@@ -68,21 +68,24 @@ export const AuditLedgerModal: React.FC<AuditLedgerModalProps> = ({
   const [filterText, setFilterText] = useState<string>('');
   const [actionFilter, setActionFilter] = useState<'ALL' | 'APPROVED' | 'ESCALATED' | 'REJECTED'>('ALL');
 
-  const fetchLogs = async () => {
+  const fetchLogs = () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/audit-log');
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.log) && data.log.length > 0) {
-          setInternalLogs(data.log);
-          try {
-            localStorage.setItem('neuralkey_audit_logs', JSON.stringify(data.log));
-          } catch {}
+      if (externalLogs && externalLogs.length > 0) {
+        setInternalLogs(externalLogs);
+        return;
+      }
+      const saved = localStorage.getItem('neuralkey_audit_logs');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setInternalLogs(parsed);
+          return;
         }
       }
+      setInternalLogs(DEFAULT_AUDIT_LOGS);
     } catch {
-      // Fallback to local / external logs silently when offline or restarting
+      setInternalLogs(DEFAULT_AUDIT_LOGS);
     } finally {
       setIsLoading(false);
     }
