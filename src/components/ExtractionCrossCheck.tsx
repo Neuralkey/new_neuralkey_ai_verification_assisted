@@ -70,13 +70,22 @@ export const ExtractionCrossCheck: React.FC<ExtractionCrossCheckProps> = ({
     (Boolean(normPrinted) && Boolean(normMrz) && !normPrinted.includes(normMrz) && !normMrz.includes(normPrinted)) ||
     (Boolean(normDeclared) && Boolean(normPrinted) && !normDeclared.includes(normPrinted) && !normPrinted.includes(normDeclared));
 
+  const normalizeIsoDate = (val?: string): string => {
+    const raw = (val || '').split('(')[0].trim();
+    const isoMatch = raw.match(/\b(\d{4})[./-](\d{2})[./-](\d{2})\b/);
+    if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+    const dmyMatch = raw.match(/\b(\d{2})[./-](\d{2})[./-](\d{4})\b/);
+    if (dmyMatch) return `${dmyMatch[3]}-${dmyMatch[2]}-${dmyMatch[1]}`;
+    return raw;
+  };
+
   const isDobMismatch =
     (Boolean(extractedMrzZone?.dateOfBirth) &&
       Boolean(extractedVisualZone?.dateOfBirth) &&
-      extractedVisualZone?.dateOfBirth !== extractedMrzZone?.dateOfBirth) ||
+      normalizeIsoDate(extractedVisualZone?.dateOfBirth) !== normalizeIsoDate(extractedMrzZone?.dateOfBirth)) ||
     (Boolean(applicant.dateOfBirth) &&
       Boolean(extractedVisualZone?.dateOfBirth) &&
-      applicant.dateOfBirth !== extractedVisualZone?.dateOfBirth);
+      normalizeIsoDate(applicant.dateOfBirth) !== normalizeIsoDate(extractedVisualZone?.dateOfBirth));
 
   const isDocNumMismatch =
     (Boolean(extractedMrzZone?.documentNumber) &&
@@ -85,6 +94,32 @@ export const ExtractionCrossCheck: React.FC<ExtractionCrossCheckProps> = ({
     (Boolean(normalizeText(applicant.documentNumber)) &&
       Boolean(normalizeText(extractedVisualZone?.documentNumber)) &&
       normalizeText(applicant.documentNumber) !== normalizeText(extractedVisualZone?.documentNumber));
+
+  const declaredExpiry = applicant.documentExpiry || extractedVisualZone?.expiryDate || '2033-09-12';
+  const printedExpiry = extractedVisualZone?.expiryDate || applicant.documentExpiry || '2033-09-12';
+  const mrzExpiry = extractedMrzZone?.expiryDate || extractedVisualZone?.expiryDate || '2033-09-12';
+
+  const normDeclaredExpiry = normalizeIsoDate(declaredExpiry);
+  const normPrintedExpiry = normalizeIsoDate(printedExpiry);
+  const normMrzExpiry = normalizeIsoDate(mrzExpiry);
+  const todayIso = new Date().toISOString().slice(0, 10);
+
+  const isDocExpired =
+    ( /^\d{4}-\d{2}-\d{2}$/.test(normPrintedExpiry) && normPrintedExpiry < todayIso ) ||
+    ( /^\d{4}-\d{2}-\d{2}$/.test(normMrzExpiry) && normMrzExpiry < todayIso );
+
+  const isExpiryCrossMismatch =
+    (Boolean(normPrintedExpiry) &&
+      Boolean(normMrzExpiry) &&
+      normPrintedExpiry !== 'N/A' &&
+      normMrzExpiry !== 'N/A' &&
+      normPrintedExpiry !== normMrzExpiry) ||
+    (Boolean(applicant.documentExpiry) &&
+      Boolean(normPrintedExpiry) &&
+      normPrintedExpiry !== 'N/A' &&
+      normDeclaredExpiry !== normPrintedExpiry);
+
+  const isExpiryFlagged = isDocExpired || isExpiryCrossMismatch;
 
   const validAseanIso = ['KHM', 'SGP', 'MYS', 'THA', 'IDN', 'VNM', 'PHL', 'LAO', 'MMR', 'BRN'];
   const isCountryMismatch =
@@ -126,11 +161,15 @@ export const ExtractionCrossCheck: React.FC<ExtractionCrossCheckProps> = ({
     },
     {
       label: 'Expiry Date',
-      declared: extractedVisualZone?.expiryDate || '2033-09-12',
-      printed: extractedVisualZone?.expiryDate || '2033-09-12',
-      mrz: extractedMrzZone?.expiryDate || extractedVisualZone?.expiryDate || '2033-09-12',
-      isMismatch: false,
-      statusNode: renderStatus('MATCH', 'Valid'),
+      declared: declaredExpiry,
+      printed: printedExpiry,
+      mrz: mrzExpiry,
+      isMismatch: isExpiryFlagged,
+      statusNode: isDocExpired
+        ? renderStatus('FLAG', isExpiryCrossMismatch ? 'Expired / Mismatch' : 'Expired')
+        : isExpiryCrossMismatch
+        ? renderStatus('FLAG', 'Expiry Mismatch')
+        : renderStatus('MATCH', 'Valid'),
       mono: true,
     },
     {

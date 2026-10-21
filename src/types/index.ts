@@ -85,6 +85,7 @@ export interface ApplicantProfile {
   fullName: string;
   dateOfBirth: string;
   documentNumber: string;
+  documentExpiry?: string;
   nationality: string;
   documentType: string;
   submittedAt: string;
