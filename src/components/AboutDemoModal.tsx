@@ -88,6 +88,17 @@ export const AboutDemoModal: React.FC<AboutDemoModalProps> = ({
             )}
           </div>
 
+          <div className="pt-2 border-t border-slate-800 flex items-center justify-between gap-2">
+            <span className="text-slate-400">Prototype Demo Video (03:00 • Silent for Voiceover):</span>
+            <a
+              href="/neuralkey_solution_demo.mp4"
+              download="NeuralKey_Prototype_Demo_Silent.mp4"
+              className="px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 font-medium flex items-center gap-1.5 cursor-pointer text-xs transition-colors"
+            >
+              <span>Download MP4 Video</span>
+            </a>
+          </div>
+
           {onResetDemo && (
             <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
               <span className="text-slate-400">Reset all test data:</span>

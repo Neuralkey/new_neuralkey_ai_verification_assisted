@@ -1,15 +1,14 @@
-const puppeteer = require('puppeteer-core');
+const { chromium } = require('/root/.bun/install/cache/playwright-core@1.64.0-c17905f0d2f6a539@@@1');
 const fs = require('fs');
 const path = require('path');
 const { spawn, execSync } = require('child_process');
-const { GoogleGenAI } = require('@google/genai');
-require('dotenv').config();
 
-const ARTIFACT_DIR_ROOT = path.resolve('/.aistudio/artifacts/brain/e1c7671b-0aac-4384-a272-44a138494cd6');
+const ARTIFACT_DIR_ROOT = path.resolve(__dirname, '../.aistudio/artifacts/brain/e1c7671b-0aac-4384-a272-44a138494cd6');
 const ARTIFACT_DIR_LOCAL = path.resolve('.aistudio/artifacts/brain/e1c7671b-0aac-4384-a272-44a138494cd6');
+const PUBLIC_DIR = path.resolve(__dirname, '../public');
 const TMP_DIR = '/tmp/neuralkey_video_build';
 
-[ARTIFACT_DIR_ROOT, ARTIFACT_DIR_LOCAL, TMP_DIR].forEach((dir) => {
+[ARTIFACT_DIR_ROOT, ARTIFACT_DIR_LOCAL, PUBLIC_DIR, TMP_DIR].forEach((dir) => {
   try {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   } catch (e) {
@@ -17,134 +16,118 @@ const TMP_DIR = '/tmp/neuralkey_video_build';
   }
 });
 
-// Clean up any old screenshot PNGs from /public so prototype deployment stays 100% clean
-[
-  '1_applicant_submits_id_and_selfie.png',
-  '2_gemini_analyzes_the_id.png',
-  '3_reviewer_sees_flag_and_risk_summary.png',
-  '4_credential_issued_after_approval.png',
-].forEach((file) => {
-  const p = path.resolve('public', file);
-  if (fs.existsSync(p)) {
-    try {
-      fs.unlinkSync(p);
-      console.log('Removed non-prototype file from public/:', file);
-    } catch (e) {}
-  }
-});
-
 const FPS = 10;
-const CHAPTER_DURATION_SEC = 20; // 12 chapters * 20s = 240s (04:00 - exactly 4 minutes)
-const TOTAL_DURATION_SEC = 240;
+const CHAPTER_DURATION_SEC = 15; // 12 chapters * 15s = 180s (03:00)
+const TOTAL_DURATION_SEC = 180;
 
 const CHAPTERS = [
   {
     id: 1,
     startSec: 0,
-    timeRange: '0:00 – 0:20',
-    title: 'Reviewer Console & ASEAN 40-ID Queue',
-    subtitle: 'Live overview of the 40-applicant verification queue with country codes (KH, SG, MY, TH, ID).',
+    timeRange: '0:00 – 0:15',
+    title: 'Reviewer Console & ASEAN 40-ID Queue Filtering',
+    subtitle: 'Overview of the 40-applicant verification queue with ASEAN country filters (Cambodia, Singapore, Malaysia, Thailand) and status filters.',
     voiceover:
-      'Welcome to the Neuralkey Verification Assistant demonstration. Here in the Reviewer Console, compliance teams oversee forty real-world identity scenarios across ASEAN member states. Filtering by nation codes—such as KH for Cambodia or SG for Singapore—reveals instant queue triage.',
+      '[Your Voiceover Cue] Introduce NeuralKey Reviewer Console and filter the 40-applicant queue across ASEAN countries (Cambodia, Singapore, Malaysia, Thailand) and status views.',
   },
   {
     id: 2,
-    startSec: 20,
-    timeRange: '0:20 – 0:40',
-    title: 'ADK Multi-Agent Architecture & DID Specification',
-    subtitle: 'Inspecting the 4-stage verification workflow and Dual-Branch did:neuralkey W3C specification.',
+    startSec: 15,
+    timeRange: '0:15 – 0:30',
+    title: 'Mobile App — Step 01: Personal Details',
+    subtitle: 'Switching to the Mobile App (Verify Your Identity) and completing Step 01 Personal Details.',
     voiceover:
-      'Opening the Architecture modal illustrates our four-stage verification workflow powered by Google ADK. In the DID Specification view, our asymmetric did:neuralkey method operates with Branch A for offline Ed25519 proofs, and Branch B for online institutional trust anchors.',
+      '[Your Voiceover Cue] Switch to the Mobile App tab. Show the 3 sequential verification steps and complete Step 01 Personal Details matching the official Cambodian National ID.',
   },
   {
     id: 3,
-    startSec: 40,
-    timeRange: '0:40 – 1:00',
-    title: 'Applicant Wallet & Portable e-ID Credentials',
-    subtitle: 'Managing self-sovereign digital identities and inspecting cryptographic DID status.',
+    startSec: 30,
+    timeRange: '0:30 – 0:45',
+    title: 'Mobile App — Step 02: Live ID Card Capture (Front & Back)',
+    subtitle: 'Capturing the Front Side and Back Side (MRZ) of the government ID card via live camera stream.',
     voiceover:
-      'Switching to the Applicant Wallet tab demonstrates self-sovereign identity management. Navigating between verified citizens like Sok Chandara and Elena Rostova displays each applicant\'s cryptographic DID status, biometric assurance tier, and portable identity credential.',
+      '[Your Voiceover Cue] Open Step 02 Photo of ID Card. Capture both the Front Side and the Back Side (ICAO 9303 MRZ band) using the live camera stream—file uploads are blocked.',
   },
   {
     id: 4,
-    startSec: 60,
-    timeRange: '1:00 – 1:20',
-    title: 'Interactive KYC Submission to Gemini 3.8 Flash',
-    subtitle: 'Submitting synthetic ID presets through the 4-stage real-time Gemini multimodal pipeline.',
+    startSec: 45,
+    timeRange: '0:45 – 1:00',
+    title: 'Mobile App — Step 03: 4-Pose Active Biometric Face Scan',
+    subtitle: 'Completing the 4 sequential active liveness challenges: Turn Head Left, Turn Head Right, Smile Naturally, and Blink.',
     voiceover:
-      'Applicants can test real-time verification directly within the wallet. Loading a synthetic ID preset and clicking submit activates our four-stage multimodal pipeline: media processing, Gemini 3.8 Flash triage extraction, deterministic MRZ checks, and reviewer dispatch.',
+      '[Your Voiceover Cue] Open Step 03 Face Scan and complete the 4 sequential active liveness challenges—Turn Head Left, Turn Head Right, Smile Naturally, and Blink.',
   },
   {
     id: 5,
-    startSec: 80,
-    timeRange: '1:20 – 1:40',
-    title: 'Multimodal Document & 3D Biometric Inspection',
-    subtitle: 'Interactive forensic bounding boxes, UV security layer simulation, and 98.6% face match.',
+    startSec: 60,
+    timeRange: '1:00 – 1:15',
+    title: 'Mobile App — Submitting Verification & Wallet Lock Screen',
+    subtitle: 'Submitting the 3 completed steps, locking the mobile wallet during review, and inspecting Track status.',
     voiceover:
-      'Returning to the Reviewer Console for Sok Chandara\'s Cambodian National ID, reviewers inspect interactive forensic bounding boxes. Toggling simulated ultraviolet illumination and three-D face mesh overlays confirms physical card integrity alongside a 98.6 percent biometric match.',
+      '[Your Voiceover Cue] Tap Verify Identity to submit encrypted proofs. Show the Wallet Locked During Review screen and inspect Track activity confirming raw photos are auto-deleted after check.',
   },
   {
     id: 6,
-    startSec: 100,
-    timeRange: '1:40 – 2:00',
-    title: 'Deterministic Field Cross-Check & MRZ Checksums',
-    subtitle: 'Cross-referencing Declared Form Data, Visual Inspection Zone, and ICAO 9303 MRZ check digits.',
+    startSec: 75,
+    timeRange: '1:15 – 1:30',
+    title: 'Reviewer Console — Vision OCR & ROI Inspector (gemini-3.8-flash)',
+    subtitle: 'Running Gemini 3.8 Flash analysis and inspecting the ID document under Normal, UV Light, and Contrast filters.',
     voiceover:
-      'In the Field Cross-Check tab, the engine correlates declared application data against the visual inspection zone and machine readable zone. All deterministic rules—including script transliteration and ICAO 9303 check digits—pass with zero discrepancies.',
+      '[Your Voiceover Cue] Return to the Reviewer Console to inspect Sok Chandara\'s Cambodian National ID in the Vision OCR & ROI Inspector. Run Gemini 3.8 Flash analysis and toggle UV Light and Contrast filters.',
   },
   {
     id: 7,
-    startSec: 120,
-    timeRange: '2:00 – 2:20',
-    title: 'ELA Forensics, ADK Agent Trace & 40-ID Benchmarks',
-    subtitle: 'Error Level Analysis heatmaps, 4-Agent Google ADK execution trace, and ground-truth metrics.',
+    startSec: 90,
+    timeRange: '1:30 – 1:45',
+    title: 'Details Check — 3-Way Information Comparison & MRZ Rules',
+    subtitle: 'Comparing Submitted vs. Printed on ID vs. ID Security Band and verifying Automated Consistency Rules.',
     voiceover:
-      'The Forensics and Liveness tab provides Error Level Analysis heatmaps and chip geometry checks. In the ADK Agent Pipeline tab, reviewers inspect our four specialist reasoning agents and verify the forty-ID ground-truth benchmark achieving 99.4 percent extraction accuracy.',
+      '[Your Voiceover Cue] In Details Check, review the Information Comparison table cross-checking Submitted form data against Printed on ID text and the ID Security Band (MRZ), plus Automated Consistency Rules.',
   },
   {
     id: 8,
-    startSec: 140,
-    timeRange: '2:20 – 2:40',
-    title: 'Catching Synthetic Identity Fraud (Marcus A. Vance)',
-    subtitle: 'Surfacing age-elevation fraud (1994 vs 1982 MRZ mismatch) and rejecting the application.',
+    startSec: 105,
+    timeRange: '1:45 – 2:00',
+    title: 'Photo Check — Optical & Template Forensics',
+    subtitle: 'Inspecting ID Document Preview under UV Light and Contrast alongside Biometric Facial Comparison.',
     voiceover:
-      'Selecting high-risk applicant Marcus Vance immediately surfaces a critical risk score of 89. Gemini catches synthetic age-elevation fraud where the printed birth year 1994 contradicts the MRZ-encoded year 1982. The reviewer promptly marks the submission as rejected.',
+      '[Your Voiceover Cue] Switch to Photo Check to inspect the ID Document Preview with Optical & Template Forensics, UV luminescence simulation, and side-by-side biometric portrait matching.',
   },
   {
     id: 9,
-    startSec: 160,
-    timeRange: '2:40 – 3:00',
-    title: 'Generative Deepfake Detection & Tier-2 Escalation',
-    subtitle: 'Identifying facial boundary diffusion on Amira Chen Wei (Risk 64/100) and escalating.',
+    startSec: 120,
+    timeRange: '2:00 – 2:15',
+    title: 'Catching Tampered ID Fraud & Rejecting (Wallet Unlocks to Re-submit)',
+    subtitle: 'Selecting tampered applicant Chhay Rathana, inspecting the name mismatch & bounding box, rejecting, and showing the unlocked re-submit banner.',
     voiceover:
-      'Next, selecting applicant Amira Chen Wei reveals an elevated risk score of 64. While document checksums pass, our Fraud Signal Agent detects generative deepfake diffusion artifacts along the jawline with a sixty-one percent face match, prompting immediate escalation.',
+      '[Your Voiceover Cue] Select tampered applicant Chhay Rathana. Gemini flags the Printed on ID vs. ID Security Band name mismatch with a numbered bounding box. Click Reject, unlocking the wallet to allow re-submission.',
   },
   {
     id: 10,
-    startSec: 180,
-    timeRange: '3:00 – 3:20',
-    title: 'Approving KYC & Issuing W3C Verifiable Credential',
-    subtitle: 'Approving verified applicant Elena Rostova and inspecting the signed Ed25519 W3C VC JSON payload.',
+    startSec: 135,
+    timeRange: '2:15 – 2:30',
+    title: 'Catching Synthetic Portrait Manipulation & Escalating',
+    subtitle: 'Selecting Amira Chen Wei Ling, inspecting facial contour tamper flags, escalating, and verifying extended wallet lock.',
     voiceover:
-      'Selecting low-risk applicant Elena Rostova, the reviewer verifies all integrity checks and clicks Approve and Issue Credential. Returning to the Applicant Wallet, her W3C Verifiable Credential is now active, backed by a cryptographic Ed25519 digital signature.',
+      '[Your Voiceover Cue] Select Amira Chen Wei Ling. Inspect the Tamper & Fraud Signal Detector bounding box around the portrait contour and click Escalate, keeping the wallet locked for specialist review.',
   },
   {
     id: 11,
-    startSec: 200,
-    timeRange: '3:20 – 3:40',
-    title: 'Tamper-Evident Audit Ledger & Relying Party Bank',
-    subtitle: 'Inspecting SHA-256 hash-chained audit log and instant 140ms Zero-Knowledge Bank onboarding.',
+    startSec: 150,
+    timeRange: '2:30 – 2:45',
+    title: 'Approving Genuine Applicant, Audit Log & Level 2 Trust Upgrade',
+    subtitle: 'Approving Sok Chandara, inspecting the Review History (Audit Log), and verifying Level 2 (IAL2) upgrade in Mobile App.',
     voiceover:
-      'Every reviewer action is immutably recorded in our SHA-256 hash-chained Audit Ledger. Moving to the Relying Party Bank simulator, Apex Global Bank verifies Elena\'s credential in 140 milliseconds using Zero-Knowledge Proofs without exposing raw document numbers.',
+      '[Your Voiceover Cue] Select Sok Chandara and click Approve. Inspect the Review History (Audit Log) recording all decisions, then open Mobile App to confirm the wallet unlocked and upgraded from Level 1 to Level 2.',
   },
   {
     id: 12,
-    startSec: 220,
-    timeRange: '3:40 – 4:00',
-    title: 'Multi-Device Responsive Architecture Across Portals',
-    subtitle: 'Demonstrating responsive layout adaptation and zero-knowledge verification across portals.',
+    startSec: 165,
+    timeRange: '2:45 – 3:00',
+    title: 'Bank Portal — Instant 1-Click Account Opening with Level 2 Identity',
+    subtitle: 'Switching to Apex Global Bank Portal and opening a bank account immediately using the verified Level 2 credential.',
     voiceover:
-      'Our architecture is built for seamless responsive operation across desktop, tablet, and mobile displays—with collapsible queues, flexible card stacks, and adaptive navigation across all three portals. Thank you for evaluating the Neuralkey Verification Assistant.',
+      '[Your Voiceover Cue] Switch to the Bank Portal at Apex Global Bank. With Sok Chandara verified at Level 2, select an account and click Open Account for instant one-click onboarding without re-uploading ID documents.',
   },
 ];
 
@@ -152,100 +135,17 @@ function delay(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-async function generateChapterAudio(ai, chapter, index) {
-  const pcmPath = path.join(TMP_DIR, `ch_${index}_20s.pcm`);
-  const wavPath = path.join(TMP_DIR, `ch_${index}_20s.wav`);
-
-  if (fs.existsSync(pcmPath) && fs.existsSync(wavPath) && fs.statSync(pcmPath).size > 10000) {
-    console.log(`✓ Reusing cached Gemini TTS voiceover for Chapter ${chapter.id}`);
-    return wavPath;
-  }
-
-  if (ai) {
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const res = await ai.models.generateContent({
-          model: 'gemini-2.5-flash-preview-tts',
-          contents: [{ parts: [{ text: chapter.voiceover }] }],
-          config: {
-            responseModalities: ['AUDIO'],
-            speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: { voiceName: 'Kore' },
-              },
-            },
-          },
-        });
-        const b64 = res.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-        if (b64) {
-          fs.writeFileSync(pcmPath, Buffer.from(b64, 'base64'));
-          // Convert 24kHz 16-bit mono PCM to WAV and fit cleanly within 20.0s window
-          execSync(
-            `ffmpeg -y -f s16le -ar 24000 -ac 1 -i "${pcmPath}" -af "apad=whole_dur=${CHAPTER_DURATION_SEC}" -t ${CHAPTER_DURATION_SEC} "${wavPath}"`,
-            { stdio: 'ignore' }
-          );
-          console.log(`✓ Synthesized Gemini TTS voiceover for Chapter ${chapter.id} (20s)`);
-          return wavPath;
-        }
-      } catch (err) {
-        console.warn(`TTS attempt ${attempt} for Chapter ${chapter.id} notice:`, err.message);
-        await delay(1200);
-      }
-    }
-  }
-
-  // Fallback clean warm tone + silence if TTS quota is reached
+function buildSilentAudioTrack() {
+  console.log('1/3 Generating clean silent audio track (03:00 / 180s) for user voiceover...');
+  const silentWav = path.join(TMP_DIR, 'silent_180s.wav');
   execSync(
-    `ffmpeg -y -f lavfi -i "sine=frequency=528:duration=0.25" -af "afade=t=out:st=0.05:d=0.2,volume=0.08,apad=whole_dur=${CHAPTER_DURATION_SEC}" -ar 24000 -ac 1 -t ${CHAPTER_DURATION_SEC} "${wavPath}"`,
+    `ffmpeg -y -f lavfi -i anullsrc=r=24000:cl=mono -t ${TOTAL_DURATION_SEC} "${silentWav}"`,
     { stdio: 'ignore' }
   );
-  return wavPath;
+  console.log('✓ Clean silent audio track ready (no AI voiceover).');
+  return silentWav;
 }
 
-async function buildFullAudioTrack() {
-  console.log('1/3 Generating 12-chapter voiceover narration audio track (04:00 / 240s)...');
-  const apiKey = process.env.GEMINI_API_KEY;
-  const ai = apiKey
-    ? new GoogleGenAI({
-        apiKey,
-        httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
-      })
-    : null;
-
-  const wavFiles = new Array(CHAPTERS.length);
-  // Process in sequential batches with small delay to stay under rate limits
-  for (let i = 0; i < CHAPTERS.length; i++) {
-    const ch = CHAPTERS[i];
-    wavFiles[i] = await generateChapterAudio(ai, ch, i);
-    await delay(350);
-  }
-
-  const concatListPath = path.join(TMP_DIR, 'audio_concat_240s.txt');
-  fs.writeFileSync(
-    concatListPath,
-    wavFiles.map((f) => `file '${f}'`).join('\n')
-  );
-
-  const voiceConcatWav = path.join(TMP_DIR, 'voice_concat_240s.wav');
-  execSync(
-    `ffmpeg -y -f concat -safe 0 -i "${concatListPath}" -c copy "${voiceConcatWav}"`,
-    { stdio: 'ignore' }
-  );
-
-  // Mix with subtle warm ambient pad (-36dB) so silence between words feels natural
-  const finalAudioWav = path.join(TMP_DIR, 'final_audio_240s.wav');
-  execSync(
-    `ffmpeg -y -i "${voiceConcatWav}" -f lavfi -i "sine=frequency=220:duration=${TOTAL_DURATION_SEC}" -filter_complex "[1:a]volume=0.012[bg];[0:a][bg]amix=inputs=2:duration=first:dropout_transition=0[aout]" -map "[aout]" -ar 24000 -ac 1 -t ${TOTAL_DURATION_SEC} "${finalAudioWav}"`,
-    { stdio: 'ignore' }
-  );
-  console.log('✓ Full 240.0s (04:00) narration audio track ready.');
-  return finalAudioWav;
-}
-
-// Injects only the presenter cursor and click ripple into the page.
-// PER USER REQUIREMENTS:
-// - Don't show up the slide number container at the bottom center of the video screen
-// - Remove the minute counter at the top right
 async function injectHudIntoPage(page) {
   await page.evaluate(() => {
     if (document.getElementById('demo-hud-root')) return;
@@ -254,7 +154,6 @@ async function injectHudIntoPage(page) {
     root.style.cssText =
       'position:fixed;inset:0;pointer-events:none;z-index:999999;font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;';
     root.innerHTML = `
-      <!-- Presenter Cursor & Click Ripple (Non-intrusive) -->
       <div id="demo-cursor" style="
         position:fixed;left:640px;top:360px;
         width:22px;height:22px;
@@ -303,13 +202,13 @@ async function updateHudState(page, { cursorX, cursorY, showRipple }) {
   );
 }
 
-// Helper to find button/element by text, return its center coordinates, and click it
 async function clickElementByText(page, selector, textIncludes) {
   return await page.evaluate(
     ({ sel, txt }) => {
       const els = Array.from(document.querySelectorAll(sel));
       const target = els.find((el) => el.innerText && el.innerText.includes(txt));
       if (target) {
+        target.scrollIntoView({ behavior: 'instant', block: 'nearest' });
         const rect = target.getBoundingClientRect();
         target.click();
         return {
@@ -318,34 +217,154 @@ async function clickElementByText(page, selector, textIncludes) {
           y: Math.round(rect.top + rect.height / 2),
         };
       }
-      return { found: false, x: 640, y: 320 };
+      return { found: false, x: 640, y: 360 };
     },
     { sel: selector, txt: textIncludes }
   );
 }
 
+async function clickSelector(page, selector) {
+  return await page.evaluate((sel) => {
+    const target = document.querySelector(sel);
+    if (target) {
+      target.scrollIntoView({ behavior: 'instant', block: 'nearest' });
+      const rect = target.getBoundingClientRect();
+      target.click();
+      return {
+        found: true,
+        x: Math.round(rect.left + rect.width / 2),
+        y: Math.round(rect.top + rect.height / 2),
+      };
+    }
+    return { found: false, x: 640, y: 360 };
+  }, selector);
+}
+
 async function run() {
-  const audioWavPath = await buildFullAudioTrack();
+  const audioWavPath = buildSilentAudioTrack();
   const outMp4Path = path.join(ARTIFACT_DIR_ROOT, 'neuralkey_solution_demo_4m00s.mp4');
   const outMp4LocalPath = path.join(ARTIFACT_DIR_LOCAL, 'neuralkey_solution_demo_4m00s.mp4');
-  // Also maintain 3m24s filename alias so existing downloads and links remain valid
   const legacyMp4Path = path.join(ARTIFACT_DIR_ROOT, 'neuralkey_solution_demo_3m24s.mp4');
   const legacyMp4LocalPath = path.join(ARTIFACT_DIR_LOCAL, 'neuralkey_solution_demo_3m24s.mp4');
 
-  console.log('2/3 Launching browser & recording 12 interactive chapters (2,400 frames @ 10fps = 04:00)...');
-  const browser = await puppeteer.launch({
+  console.log('2/3 Launching browser & recording 12 scenes of current prototype (1,800 frames @ 10fps = 03:00, silent for user voiceover)...');
+  const browser = await chromium.launch({
     executablePath:
-      '/tmp/chrome-shell/chrome-headless-shell/linux-155.0.8059.84/chrome-headless-shell-linux64/chrome-headless-shell',
+      '/ms-playwright/chromium_headless_shell-1247/chrome-headless-shell-linux64/chrome-headless-shell',
     args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
-    defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1 },
   });
 
-  const page = await browser.newPage();
-  await page.goto('http://localhost:3000', { waitUntil: 'networkidle0', timeout: 30000 });
-  await delay(1000);
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+
+  // Inject synthetic live camera feed for Step 02 (ID Front/Back) and Step 03 (4-Pose Face Scan)
+  await page.addInitScript(() => {
+    if (!navigator.mediaDevices) navigator.mediaDevices = {};
+    navigator.mediaDevices.getUserMedia = async (constraints) => {
+      const isSelfie = JSON.stringify(constraints || {}).includes('user');
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 480;
+      const ctx = canvas.getContext('2d');
+      let tick = 0;
+      setInterval(() => {
+        tick++;
+        if (isSelfie) {
+          // Biometric face scan live viewfinder simulation
+          const grad = ctx.createRadialGradient(320, 240, 40, 320, 240, 300);
+          grad.addColorStop(0, '#1e293b');
+          grad.addColorStop(1, '#090d16');
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, 640, 480);
+
+          // Head & shoulders silhouette
+          const sway = Math.sin(tick * 0.15) * 8;
+          ctx.fillStyle = '#334155';
+          ctx.beginPath();
+          ctx.ellipse(320 + sway, 420, 140, 90, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = '#cbd5e1';
+          ctx.beginPath();
+          ctx.ellipse(320 + sway, 220, 75, 95, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Facial alignment mesh points
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(235 + sway, 115, 170, 210);
+          ctx.fillStyle = '#34d399';
+          [
+            [290 + sway, 195],
+            [350 + sway, 195],
+            [320 + sway, 230],
+            [295 + sway, 265],
+            [345 + sway, 265],
+          ].forEach(([px, py]) => {
+            ctx.beginPath();
+            ctx.arc(px, py, 4, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        } else {
+          // Government ID live camera capture simulation
+          ctx.fillStyle = '#0c2238';
+          ctx.fillRect(0, 0, 640, 480);
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 4;
+          ctx.strokeRect(28, 36, 584, 408);
+
+          ctx.fillStyle = '#fbbf24';
+          ctx.font = 'bold 20px sans-serif';
+          ctx.fillText('KINGDOM OF CAMBODIA · NATIONAL IDENTITY CARD', 52, 82);
+
+          // Portrait box on card
+          ctx.fillStyle = '#1e293b';
+          ctx.fillRect(52, 110, 140, 175);
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(52, 110, 140, 175);
+
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = '13px monospace';
+          ctx.fillText('HOLDER NAME:', 216, 130);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 22px sans-serif';
+          ctx.fillText('SOK CHANDARA', 216, 158);
+
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = '13px monospace';
+          ctx.fillText('ID NUMBER:', 216, 195);
+          ctx.fillStyle = '#38bdf8';
+          ctx.font = 'bold 20px monospace';
+          ctx.fillText('010892746(01)', 216, 222);
+
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = '13px monospace';
+          ctx.fillText('DOB / EXPIRY:', 216, 255);
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 18px monospace';
+          ctx.fillText('1995-09-12 / 2033-09-12', 216, 280);
+
+          // MRZ band
+          ctx.fillStyle = '#020617';
+          ctx.fillRect(44, 330, 552, 92);
+          ctx.fillStyle = '#34d399';
+          ctx.font = 'bold 19px monospace';
+          ctx.fillText('IDKHM010892746<<<<<<<<<<<<<<', 60, 365);
+          ctx.fillText('9509124M3309128KHM<<<<<<<<<<<2', 60, 400);
+
+          const scanY = 40 + ((tick * 10) % 390);
+          ctx.fillStyle = 'rgba(56, 189, 248, 0.35)';
+          ctx.fillRect(32, scanY, 576, 4);
+        }
+      }, 50);
+      return canvas.captureStream(25);
+    };
+  });
+
+  await page.goto('http://localhost:3000', { waitUntil: 'networkidle', timeout: 30000 });
+  await delay(800);
   await injectHudIntoPage(page);
 
-  // Spawn FFmpeg process reading JPEG frames from stdin and muxing with the 240s audio track
   const ffmpegArgs = [
     '-y',
     '-f',
@@ -363,7 +382,7 @@ async function run() {
     '-preset',
     'veryfast',
     '-crf',
-    '23',
+    '22',
     '-pix_fmt',
     'yuv420p',
     '-vf',
@@ -388,7 +407,7 @@ async function run() {
   let totalFramesWritten = 0;
 
   async function recordSubStep(durationSec, actionFn) {
-    let cursor = { x: 640, y: 340, ripple: false };
+    let cursor = { x: 640, y: 360, ripple: false };
     if (actionFn) {
       const res = await actionFn();
       if (res && typeof res.x === 'number') {
@@ -413,301 +432,302 @@ async function run() {
   }
 
   // =========================================================================
-  // CHAPTER 1 (0:00 - 0:20): Reviewer Console & ASEAN 40-ID Queue (KH, SG, ALL)
+  // SCENE 1 (0:00 - 0:15): Reviewer Console & ASEAN 40-ID Queue Filtering
   // =========================================================================
-  console.log('Recording Chapter 1: Reviewer Console & ASEAN 40-ID Queue...');
-  await recordSubStep(5, async () => {
+  console.log('Recording Scene 1: Reviewer Console & ASEAN Queue Filtering...');
+  await recordSubStep(3, async () => {
     await page.evaluate(() => window.scrollTo(0, 0));
-    return { x: 240, y: 180, ripple: false };
+    return { x: 200, y: 210, ripple: false };
   });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'KH');
+  await recordSubStep(3, async () => {
+    const c = await clickElementByText(page, 'button', 'Cambodia');
     return { ...c, ripple: true };
   });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'SG');
+  await recordSubStep(3, async () => {
+    const c = await clickElementByText(page, 'button', 'Singapore');
     return { ...c, ripple: true };
   });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'All ASEAN');
+  await recordSubStep(3, async () => {
+    const c = await clickElementByText(page, 'button', 'Malaysia');
     return { ...c, ripple: true };
   });
-
-  // =========================================================================
-  // CHAPTER 2 (0:20 - 0:40): ADK Multi-Agent Architecture & DID Specification
-  // =========================================================================
-  console.log('Recording Chapter 2: ADK Multi-Agent Architecture & DID Spec...');
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'header button', 'About');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    await page.evaluate(() => {
-      const modal = document.querySelector('.overflow-y-auto');
-      if (modal) modal.scrollBy({ top: 320, behavior: 'instant' });
-    });
-    return { x: 640, y: 380, ripple: false };
-  });
-  await recordSubStep(5, async () => {
-    // Close About modal and open DID Spec modal
-    await clickElementByText(page, 'button', 'Return to');
-    await delay(200);
-    const c = await clickElementByText(page, 'header button', 'DID Spec');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'Branch B');
-    await delay(300);
-    await page.evaluate(() => {
-      const closeBtns = Array.from(document.querySelectorAll('button'));
-      const close = closeBtns.find(
-        (b) => b.innerText.includes('Close') || b.querySelector('svg.lucide-x')
-      );
-      if (close) close.click();
-    });
+  await recordSubStep(3, async () => {
+    const c = await clickElementByText(page, 'button', 'All Countries');
     return { ...c, ripple: true };
   });
 
   // =========================================================================
-  // CHAPTER 3 (0:40 - 1:00): Applicant Wallet & Portable e-ID Credentials
+  // SCENE 2 (0:15 - 0:30): Mobile App — Step 01 Personal Details
   // =========================================================================
-  console.log('Recording Chapter 3: Applicant Wallet & Credentials...');
-  await recordSubStep(5, async () => {
-    await page.keyboard.press('Escape');
-    const c = await clickElementByText(page, 'nav button', 'Applicant Wallet');
+  console.log('Recording Scene 2: Mobile App — Step 01 Personal Details...');
+  await recordSubStep(4, async () => {
+    const c = await clickElementByText(page, 'nav button', 'Mobile App');
     return { ...c, ripple: true };
   });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'Elena Rostova');
+  await recordSubStep(4, async () => {
+    const c = await clickElementByText(page, 'div.cursor-pointer', 'Personal Details');
     return { ...c, ripple: true };
   });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'Marcus A. Vance');
-    return { ...c, ripple: true };
+  await recordSubStep(3, async () => {
+    return { x: 640, y: 420, ripple: false };
   });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'Sok Chandara');
+  await recordSubStep(4, async () => {
+    const c = await clickElementByText(page, 'button', 'Save Profile & Continue');
     return { ...c, ripple: true };
   });
 
   // =========================================================================
-  // CHAPTER 4 (1:00 - 1:20): Interactive KYC Submission to Gemini 3.8 Flash
+  // SCENE 3 (0:30 - 0:45): Mobile App — Step 02 Photo of ID Card (Front & Back)
   // =========================================================================
-  console.log('Recording Chapter 4: Interactive KYC Submission...');
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'Submit ID');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'Cambodia ID');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'Submit to Gemini');
-    await delay(300);
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    await delay(1200);
-    return { x: 800, y: 520, ripple: false };
-  });
-
-  // =========================================================================
-  // CHAPTER 5 (1:20 - 1:40): Multimodal Document & 3D Biometric Inspection
-  // =========================================================================
-  console.log('Recording Chapter 5: Document & Biometrics Inspection...');
-  await recordSubStep(5, async () => {
-    await page.evaluate(() => window.scrollTo(0, 0));
-    const c = await clickElementByText(page, 'nav button', 'Reviewer Console');
-    await delay(200);
-    await clickElementByText(page, 'button', 'Sok Chandara');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'UV Light');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'Liveness');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'Standard');
-    await page.evaluate(() => window.scrollBy({ top: 200, behavior: 'instant' }));
-    return { ...c, ripple: true };
-  });
-
-  // =========================================================================
-  // CHAPTER 6 (1:40 - 2:00): Deterministic Field Cross-Check & MRZ Checksums
-  // =========================================================================
-  console.log('Recording Chapter 6: Deterministic Field Cross-Check & MRZ...');
-  await recordSubStep(5, async () => {
-    await page.evaluate(() => window.scrollTo(0, 0));
-    const c = await clickElementByText(page, 'button', 'Field Cross-Check');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    await page.evaluate(() => window.scrollBy({ top: 180, behavior: 'instant' }));
-    return { x: 560, y: 340, ripple: false };
-  });
-  await recordSubStep(5, async () => {
-    await page.evaluate(() => window.scrollBy({ top: 220, behavior: 'instant' }));
-    return { x: 560, y: 440, ripple: false };
-  });
-  await recordSubStep(5, async () => {
-    await page.evaluate(() => window.scrollTo(0, 0));
-    return { x: 640, y: 220, ripple: false };
-  });
-
-  // =========================================================================
-  // CHAPTER 7 (2:00 - 2:20): ELA Forensics, ADK Agent Trace & 40-ID Benchmarks
-  // =========================================================================
-  console.log('Recording Chapter 7: Forensics & Benchmarks...');
-  await recordSubStep(5, async () => {
-    await page.evaluate(() => window.scrollTo(0, 0));
-    const c = await clickElementByText(page, 'button', 'Forensics & Liveness');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'ELA');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'ADK Agent Pipeline');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    await page.evaluate(() => window.scrollBy({ top: 280, behavior: 'instant' }));
-    return { x: 580, y: 420, ripple: false };
-  });
-
-  // =========================================================================
-  // CHAPTER 8 (2:20 - 2:40): Catching Synthetic Identity Fraud (Marcus A. Vance)
-  // =========================================================================
-  console.log('Recording Chapter 8: Marcus Vance Synthetic Identity Fraud...');
-  await recordSubStep(5, async () => {
-    await page.evaluate(() => window.scrollTo(0, 0));
-    const c = await clickElementByText(page, 'button', 'Marcus A. Vance');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'Field Cross-Check');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'Document & Biometrics');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'Reject');
-    return { ...c, ripple: true };
-  });
-
-  // =========================================================================
-  // CHAPTER 9 (2:40 - 3:00): Generative Deepfake Detection & Tier-2 Escalation
-  // =========================================================================
-  console.log('Recording Chapter 9: Deepfake Detection & Escalation...');
-  await recordSubStep(5, async () => {
-    await page.evaluate(() => window.scrollTo(0, 0));
-    const c = await clickElementByText(page, 'button', 'Amira Chen Wei');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    await page.evaluate(() => window.scrollBy({ top: 180, behavior: 'instant' }));
-    return { x: 1020, y: 380, ripple: false };
-  });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'Escalate');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    await delay(300);
-    return { x: 1020, y: 450, ripple: false };
-  });
-
-  // =========================================================================
-  // CHAPTER 10 (3:00 - 3:20): Approving KYC & Issuing W3C Verifiable Credential
-  // =========================================================================
-  console.log('Recording Chapter 10: Human Approval & Credential Issuance...');
-  await recordSubStep(5, async () => {
-    await page.evaluate(() => window.scrollTo(0, 0));
-    const c = await clickElementByText(page, 'button', 'Elena Rostova');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'Approve & Issue');
-    await delay(300);
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'nav button', 'Applicant Wallet');
-    await delay(200);
-    await clickElementByText(page, 'button', 'Credentials');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'button', 'View Raw W3C VC JSON');
-    return { ...c, ripple: true };
-  });
-
-  // =========================================================================
-  // CHAPTER 11 (3:20 - 3:40): Tamper-Evident Audit Ledger & Relying Party Bank
-  // =========================================================================
-  console.log('Recording Chapter 11: Audit Ledger & Relying Party Bank...');
-  await recordSubStep(5, async () => {
-    await clickElementByText(page, 'button', 'Close');
-    await delay(150);
-    const c = await clickElementByText(page, 'header button', 'Audit Ledger');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    await page.evaluate(() => {
-      const closeBtns = Array.from(document.querySelectorAll('button'));
-      const close = closeBtns.find((b) => b.querySelector('svg.lucide-x'));
-      if (close) close.click();
-    });
-    await delay(150);
-    const c = await clickElementByText(page, 'nav button', 'Relying Party Bank');
-    return { ...c, ripple: true };
-  });
-  await recordSubStep(5, async () => {
-    await page.evaluate(() => window.scrollBy({ top: 220, behavior: 'instant' }));
-    const c = await clickElementByText(page, 'button', 'Present Neuralkey VC');
+  console.log('Recording Scene 3: Mobile App — Step 02 Photo of ID Card...');
+  await recordSubStep(4, async () => {
+    const c = await clickElementByText(page, 'div.cursor-pointer', 'Photo of ID Card');
     await delay(400);
     return { ...c, ripple: true };
   });
-  await recordSubStep(5, async () => {
-    await page.evaluate(() => window.scrollBy({ top: 280, behavior: 'instant' }));
-    const c = await clickElementByText(page, 'button', 'Branch B: Issuer');
+  await recordSubStep(4, async () => {
+    // Capture Front Side
+    const c = await clickSelector(page, 'button[title="Take Picture"]');
+    await delay(300);
+    return { ...c, ripple: true };
+  });
+  await recordSubStep(3, async () => {
+    // Show Back Side viewfinder ready
+    return { x: 640, y: 420, ripple: false };
+  });
+  await recordSubStep(4, async () => {
+    // Capture Back Side -> returns to /verify with Step 02 checked
+    const c = await clickSelector(page, 'button[title="Take Picture"]');
+    await delay(300);
     return { ...c, ripple: true };
   });
 
   // =========================================================================
-  // CHAPTER 12 (3:40 - 4:00): Multi-Device Responsive Architecture Across Portals
-  // PER USER REQUIREMENT:
-  // - At 03:08 - 03:20 minute the screen was zoom in in a large scale that cause the screen become complex.
-  // FIXED: Maintain 1280x720 standard viewport! No zoom-in, no scaling up!
+  // SCENE 4 (0:45 - 1:00): Mobile App — Step 03 4-Pose Active Face Scan
   // =========================================================================
-  console.log('Recording Chapter 12: Multi-Device Responsive Architecture...');
-  await recordSubStep(5, async () => {
-    await page.evaluate(() => window.scrollTo(0, 0));
-    const c = await clickElementByText(page, 'nav button', 'Reviewer Console');
+  console.log('Recording Scene 4: Mobile App — Step 03 4-Pose Face Scan...');
+  await recordSubStep(3, async () => {
+    const c = await clickElementByText(page, 'div.cursor-pointer', 'Face Scan');
+    await delay(400);
     return { ...c, ripple: true };
   });
-  await recordSubStep(5, async () => {
-    // Scroll smoothly through the reviewer console columns demonstrating the responsive grid
-    await page.evaluate(() => window.scrollBy({ top: 240, behavior: 'smooth' }));
+  await recordSubStep(3, async () => {
+    // Pose 1: Turn Head Left
+    const c = await clickElementByText(page, 'button', 'Capture');
+    await delay(200);
+    return { ...c, ripple: true };
+  });
+  await recordSubStep(3, async () => {
+    // Pose 2: Turn Head Right
+    const c = await clickElementByText(page, 'button', 'Capture');
+    await delay(200);
+    return { ...c, ripple: true };
+  });
+  await recordSubStep(3, async () => {
+    // Pose 3: Smile Naturally
+    const c = await clickElementByText(page, 'button', 'Capture');
+    await delay(200);
+    return { ...c, ripple: true };
+  });
+  await recordSubStep(3, async () => {
+    // Pose 4: Blink -> Completes & returns to /verify ("Ready to Submit")
+    const c = await clickElementByText(page, 'button', 'Capture');
+    await delay(300);
+    return { ...c, ripple: true };
+  });
+
+  // =========================================================================
+  // SCENE 5 (1:00 - 1:15): Mobile App — Submitting & Wallet Lock Screen
+  // =========================================================================
+  console.log('Recording Scene 5: Submitting Verification & Wallet Lock Screen...');
+  await recordSubStep(4, async () => {
+    const c = await clickElementByText(page, 'button', 'Verify identity');
+    await delay(350);
+    return { ...c, ripple: true };
+  });
+  await recordSubStep(4, async () => {
+    // Wait for submission to complete and Wallet Locked During Review screen to appear
+    await delay(2600);
     return { x: 640, y: 360, ripple: false };
   });
-  await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'nav button', 'Applicant Wallet');
+  await recordSubStep(4, async () => {
+    // Click Track button on Lock Screen
+    const c = await clickElementByText(page, 'button', 'Track');
+    return { ...c, ripple: true };
+  });
+  await recordSubStep(3, async () => {
+    // Click Back to return to Wallet Lock Screen
+    const c = await clickElementByText(page, 'button', 'Back');
+    return { ...c, ripple: true };
+  });
+
+  // =========================================================================
+  // SCENE 6 (1:15 - 1:30): Reviewer Console — Vision OCR & ROI Inspector
+  // =========================================================================
+  console.log('Recording Scene 6: Reviewer Console — Vision OCR & ROI Inspector...');
+  await recordSubStep(4, async () => {
     await page.evaluate(() => window.scrollTo(0, 0));
+    const c = await clickElementByText(page, 'nav button', 'Reviewer Console');
+    await delay(250);
+    await clickElementByText(page, 'button', 'Sok Chandara');
+    return { ...c, ripple: true };
+  });
+  await recordSubStep(4, async () => {
+    const c = await clickElementByText(page, 'button', 'Run Gemini Analysis');
+    await delay(400);
+    return { ...c, ripple: true };
+  });
+  await recordSubStep(4, async () => {
+    const c = await clickElementByText(page, 'button', 'UV Light');
+    return { ...c, ripple: true };
+  });
+  await recordSubStep(3, async () => {
+    await clickElementByText(page, 'button', 'Contrast');
+    await delay(150);
+    const c = await clickElementByText(page, 'button', 'Normal');
+    return { ...c, ripple: true };
+  });
+
+  // =========================================================================
+  // SCENE 7 (1:30 - 1:45): Details Check — 3-Way Information Comparison
+  // =========================================================================
+  console.log('Recording Scene 7: Details Check — Information Comparison...');
+  await recordSubStep(5, async () => {
+    const c = await clickElementByText(page, 'button', 'Details Check');
     return { ...c, ripple: true };
   });
   await recordSubStep(5, async () => {
-    const c = await clickElementByText(page, 'nav button', 'Relying Party Bank');
-    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.evaluate(() => window.scrollBy({ top: 240, behavior: 'instant' }));
+    return { x: 640, y: 420, ripple: false };
+  });
+  await recordSubStep(5, async () => {
+    await page.evaluate(() => window.scrollBy({ top: 180, behavior: 'instant' }));
+    return { x: 640, y: 500, ripple: false };
+  });
+
+  // =========================================================================
+  // SCENE 8 (1:45 - 2:00): Photo Check — Optical & Template Forensics
+  // =========================================================================
+  console.log('Recording Scene 8: Photo Check — Optical & Template Forensics...');
+  await recordSubStep(5, async () => {
+    await page.evaluate(() => window.scrollTo(0, 220));
+    const c = await clickElementByText(page, 'button', 'Photo Check');
     return { ...c, ripple: true };
+  });
+  await recordSubStep(5, async () => {
+    const btns = await page.evaluate(() => {
+      const allUv = Array.from(document.querySelectorAll('button')).filter((b) =>
+        b.innerText.includes('UV Light')
+      );
+      const target = allUv[allUv.length - 1];
+      if (target) {
+        const r = target.getBoundingClientRect();
+        target.click();
+        return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };
+      }
+      return { x: 640, y: 360 };
+    });
+    return { ...btns, ripple: true };
+  });
+  await recordSubStep(5, async () => {
+    await page.evaluate(() => window.scrollBy({ top: 260, behavior: 'instant' }));
+    return { x: 640, y: 460, ripple: false };
+  });
+
+  // =========================================================================
+  // SCENE 9 (2:00 - 2:15): Catching Tampered ID Fraud & Rejecting
+  // =========================================================================
+  console.log('Recording Scene 9: Catching Tampered ID Fraud & Rejecting...');
+  await recordSubStep(4, async () => {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await clickElementByText(page, 'button', 'Details Check');
+    const c = await clickElementByText(page, 'button', 'Chhay Rathana');
+    return { ...c, ripple: true };
+  });
+  await recordSubStep(4, async () => {
+    await page.evaluate(() => window.scrollBy({ top: 180, behavior: 'instant' }));
+    return { x: 640, y: 380, ripple: false };
+  });
+  await recordSubStep(4, async () => {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const c = await clickElementByText(page, 'button', 'Reject');
+    await delay(250);
+    return { ...c, ripple: true };
+  });
+  await recordSubStep(3, async () => {
+    // Show unlocked wallet with Rejection Banner ("Submission Rejected — Please Re-submit")
+    const c = await clickElementByText(page, 'nav button', 'Mobile App');
+    return { ...c, ripple: true };
+  });
+
+  // =========================================================================
+  // SCENE 10 (2:15 - 2:30): Catching Portrait Manipulation & Escalating
+  // =========================================================================
+  console.log('Recording Scene 10: Catching Portrait Manipulation & Escalating...');
+  await recordSubStep(4, async () => {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await clickElementByText(page, 'nav button', 'Reviewer Console');
+    await delay(200);
+    const c = await clickElementByText(page, 'button', 'Amira Chen Wei Ling');
+    return { ...c, ripple: true };
+  });
+  await recordSubStep(4, async () => {
+    return { x: 1020, y: 360, ripple: false };
+  });
+  await recordSubStep(4, async () => {
+    const c = await clickElementByText(page, 'button', 'Escalate');
+    await delay(250);
+    return { ...c, ripple: true };
+  });
+  await recordSubStep(3, async () => {
+    return { x: 1020, y: 420, ripple: false };
+  });
+
+  // =========================================================================
+  // SCENE 11 (2:30 - 2:45): Approving Genuine Applicant, Audit Log & Level 2
+  // =========================================================================
+  console.log('Recording Scene 11: Approving Sok Chandara, Audit Log & Level 2 Upgrade...');
+  await recordSubStep(4, async () => {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const c = await clickElementByText(page, 'button', 'Sok Chandara');
+    return { ...c, ripple: true };
+  });
+  await recordSubStep(4, async () => {
+    const c = await clickElementByText(page, 'button', 'Approve');
+    await delay(300);
+    return { ...c, ripple: true };
+  });
+  await recordSubStep(4, async () => {
+    const c = await clickElementByText(page, 'button', 'Review History');
+    await page.evaluate(() => window.scrollBy({ top: 180, behavior: 'instant' }));
+    return { ...c, ripple: true };
+  });
+  await recordSubStep(3, async () => {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const c = await clickElementByText(page, 'nav button', 'Mobile App');
+    return { ...c, ripple: true };
+  });
+
+  // =========================================================================
+  // SCENE 12 (2:45 - 3:00): Bank Portal — Instant 1-Click Account Opening
+  // =========================================================================
+  console.log('Recording Scene 12: Bank Portal — Instant 1-Click Account Opening...');
+  await recordSubStep(4, async () => {
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const c = await clickElementByText(page, 'nav button', 'Bank Portal');
+    return { ...c, ripple: true };
+  });
+  await recordSubStep(3, async () => {
+    const c = await clickElementByText(page, 'button', 'Business Account');
+    return { ...c, ripple: true };
+  });
+  await recordSubStep(4, async () => {
+    const c = await clickElementByText(page, 'button', 'Open Account');
+    await delay(900);
+    return { ...c, ripple: true };
+  });
+  await recordSubStep(4, async () => {
+    return { x: 640, y: 520, ripple: false };
   });
 
   ffmpegProc.stdin.end();
@@ -722,7 +742,7 @@ async function run() {
 
   const stat = fs.statSync(outMp4Path);
   console.log(
-    `✓ Generated 4:00 MP4 video: ${outMp4Path} (${(stat.size / (1024 * 1024)).toFixed(2)} MB, ${totalFramesWritten} frames = ${(totalFramesWritten / FPS).toFixed(1)}s)`
+    `✓ Generated 03:00 silent MP4 video of current prototype: ${outMp4Path} (${(stat.size / (1024 * 1024)).toFixed(2)} MB, ${totalFramesWritten} frames = ${(totalFramesWritten / FPS).toFixed(1)}s)`
   );
 
   try {
@@ -733,7 +753,7 @@ async function run() {
     console.warn('Copy notice:', e.message);
   }
 
-  console.log('3/3 Embedding 4:00 MP4 and chapter manifest into standalone Artifact HTML...');
+  console.log('3/3 Embedding silent MP4 and storyboard chapter manifest into standalone Artifact HTML...');
   const videoB64 = fs.readFileSync(outMp4Path).toString('base64');
   const payloadBlock = `<!-- VIDEO_BASE64_PAYLOAD_START -->
   <script id="videoPayloadScript">
@@ -747,7 +767,12 @@ async function run() {
     path.join(ARTIFACT_DIR_LOCAL, 'demo_video_submission.html'),
   ].forEach((htmlFile) => {
     if (fs.existsSync(htmlFile)) {
-      const content = fs.readFileSync(htmlFile, 'utf8');
+      let content = fs.readFileSync(htmlFile, 'utf8');
+      content = content
+        .replace(/04:00/g, '03:00')
+        .replace(/240\.0s/g, '180.0s')
+        .replace(/With AI Voiceover/g, 'Video Only · Ready for Your Voiceover')
+        .replace(/Synchronized AI Voiceover Included/g, 'Silent Video Only · Ready for Your Voiceover');
       const updated = content.replace(
         /<!-- VIDEO_BASE64_PAYLOAD_START -->[\s\S]*?<!-- VIDEO_BASE64_PAYLOAD_END -->/,
         payloadBlock
@@ -757,7 +782,7 @@ async function run() {
     }
   });
 
-  console.log('Done! 04:00 video demonstration studio is ready in the Artifacts directory.');
+  console.log('Done! Silent MP4 video of the current prototype is ready in the Artifacts directory.');
 }
 
 run().catch((err) => {
